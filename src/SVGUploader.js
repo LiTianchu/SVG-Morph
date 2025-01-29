@@ -79,7 +79,7 @@ function SVGUploader({ onSvgUploaded }) {
                     justifyContent: 'center',
                     alignItems: 'center',
                     cursor: 'pointer',
-                    color: 'white',
+                    color: 'black',
                     background: 'none',  // Remove default button background
                     padding: 0,  // Remove default button padding
                     fontFamily: 'inherit',  // Use the same font as the rest of your app
@@ -107,6 +107,7 @@ function SVGUploader({ onSvgUploaded }) {
                     fontSize: '24px',
                     justifyContent: 'center',
                     alignItems: 'center',
+                    color: "black"
                 }}
                 onDragOver={handleDragOver}
                 onDrop={handleDrop}
