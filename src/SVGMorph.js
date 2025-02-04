@@ -16,6 +16,14 @@ function SVGMorph({ svgs }) {
     if (!svgs || svgs.length < 2) {
       return;
     }
+
+    const toCommandArray = (path) => {
+      for (let i = 0; i < path.length; i++) {
+        // use regex to detect command
+
+      }
+    }
+
     const getNextElementEndIndex = (path, index) => {
       let currentIndex = index;
       const pathLength = path.length;
@@ -34,26 +42,17 @@ function SVGMorph({ svgs }) {
           const nextNonNumberIndex = path.slice(currentIndex).search(/[^0-9.]/);
 
           if (nextNonNumberIndex === -1) { // return end of string
-            return pathLength;
+            return pathLength + 1;
           }
 
           return currentIndex + nextNonNumberIndex; // return the end index of the extracted number
         } else { // char is a command
-          if (currentIndex === pathLength - 1) {
-            return pathLength; // end of string
-          }
           return currentIndex + 1;
         }
       }
-      return pathLength; // end of string
+      return pathLength + 1; // end of string
     }
 
-    const toCommandArray = (path) => {
-      for (let i = 0; i < path.length; i++) {
-        // use regex to detect command
-
-      }
-    }
 
     const cleanPath = (path) => {
       return path.trim();
@@ -70,34 +69,41 @@ function SVGMorph({ svgs }) {
       }
 
       let absoluteCoordPath = "";
+      let prevX = 0, prevY = 0;
+
       // convert relative coordinates to absolute coordinates
-      const pathArray = path.split('m');
-      pathArray.forEach((subPath, i) => {
-        if (i === 0) { // skip first one
+      //const pathArray = ;
+      path.split('m').forEach((subPath, i) => {
+        if (i === 0) { // skip first one and record starting point
+          const startingXCoordEndIndex = getNextElementEndIndex(subPath, 0);
+          const startingYCoordEndIndex = getNextElementEndIndex(subPath, startingXCoordEndIndex);
+          prevX = parseFloat(subPath.slice(0, startingXCoordEndIndex));
+          prevY = parseFloat(subPath.slice(startingXCoordEndIndex, startingYCoordEndIndex));
+          absoluteCoordPath += "M" + subPath;
           return;
         }
 
-        if (path.trim().slice(-1) === 'z' || path.trim().slice(-1) === 'Z') { // if previous path ends with z
-          // M coordinate should be previous M coordinate + current m coordinate
-          const prevXCoordEndIndex = getNextElementEndIndex(pathArray[i - 1], 0);
-          const prevYCoordEndIndex = getNextElementEndIndex(pathArray[i - 1], prevXCoordEndIndex);
-          const prevXCoord = pathArray[i - 1].slice(0, prevXCoordEndIndex);
-          const prevYCoord = pathArray[i - 1].slice(prevXCoordEndIndex, prevYCoordEndIndex);
-
-          const xCoordEndIndex = getNextElementEndIndex(subPath, 0);
-          const yCoordEndIndex = getNextElementEndIndex(subPath, xCoordEndIndex);
-          const xCoord = subPath.slice(0, xCoordEndIndex);
-          const yCoord = subPath.slice(xCoordEndIndex, yCoordEndIndex);
-
-          let newPath = subPath.slice(yCoordEndIndex);
-
-          const newXCoord = parseFloat(prevXCoord) + parseFloat(xCoord);
-          const newYCoord = parseFloat(prevYCoord) + parseFloat(yCoord);
-
-          newPath = newXCoord + (newYCoord < 0 ? "" : " ") + newYCoord + newPath;
-          absoluteCoordPath += "M" + newPath;
+        if (pathArray[i - 1].trim().slice(-1) !== 'z' && pathArray[i - 1].trim().slice(-1) !== 'Z') { // if previous path is not closed
+          // TODO: unclosed path handling
         }
+
+        // M coordinate should be previous M coordinate + current m coordinate
+        const xCoordEndIndex = getNextElementEndIndex(subPath, 0);
+        const yCoordEndIndex = getNextElementEndIndex(subPath, xCoordEndIndex);
+        const xCoord = subPath.slice(0, xCoordEndIndex);
+        const yCoord = subPath.slice(xCoordEndIndex, yCoordEndIndex);
+
+        let newPath = subPath.slice(yCoordEndIndex);
+
+        const newXCoord = prevX + parseFloat(xCoord);
+        const newYCoord = prevY + parseFloat(yCoord);
+        prevX = newXCoord;
+        prevY = newYCoord;
+
+        newPath = newXCoord + (newYCoord < 0 ? "" : " ") + newYCoord + newPath;
+        absoluteCoordPath += "M" + newPath;
       });
+
       return absoluteCoordPath;
     }
 
@@ -105,18 +111,20 @@ function SVGMorph({ svgs }) {
       const parser = new DOMParser();
       const svgDoc = parser.parseFromString(svgString, 'image/svg+xml');
       let pathList = Array.from(svgDoc.querySelectorAll('path')).map(path => path.getAttribute('d'));
-      let subPaths = [];
+      let extractedPaths = [];
       pathList.forEach((path, i) => {
         const cleanedPath = cleanPath(path);
-        const convertedPath = convertRelativeToAbsolute(cleanedPath);
+        const convertedAbsolutePath = convertRelativeToAbsolute(cleanedPath);
         // if path contains subpaths, split them into separate paths
-        if (path.includes('M')) {
-          const subPath = path.split('M').filter(subPath => subPath.length > 0);
-          subPaths.push(...subPath);
+        if (convertedAbsolutePath.includes('M')) {
+          const subPaths = convertedAbsolutePath.split(/(?=M)/).filter(Boolean); // split at each 'M' while keeping it
+          extractedPaths.push(...subPaths);
+
         } else {
-          subPaths.push(path);
+          extractedPaths.push(convertedAbsolutePath);
         }
-      })
+      });
+      return extractedPaths;
     };
 
     const svgPathLists = svgs.map(extractPaths);
