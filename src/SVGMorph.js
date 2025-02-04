@@ -9,31 +9,128 @@ function SVGMorph({ svgs }) {
   //const interpolatorsRef = useRef([]);
 
   useEffect(() => {
+    console.log(svgs);
     //if (!svg1 || !svg2 ||!svg3) return;
-    if (!svgs || svgs.length < 2) return;
-
     d3.select(svgRef.current).selectAll('*').remove();
     pathsRef.current = []; // Clear previous paths
+    if (!svgs || svgs.length < 2) {
+      return;
+    }
+    const getNextElementEndIndex = (path, index) => {
+      let currentIndex = index;
+      const pathLength = path.length;
+      while (currentIndex < pathLength) {
+        const char = path[currentIndex];
+        if (char === ' ' || char === ',') {
+          currentIndex++;
+          continue;
+        }
+
+        if (/^[0-9.-]$/.test(char)) { // if this char marks the start of a positive or negative number
+          // get next index of non-number or end of string
+          if (char === '-') {
+            currentIndex++;
+          }
+          const nextNonNumberIndex = path.slice(currentIndex).search(/[^0-9.]/);
+
+          if (nextNonNumberIndex === -1) { // return end of string
+            return pathLength;
+          }
+
+          return currentIndex + nextNonNumberIndex; // return the end index of the extracted number
+        } else { // char is a command
+          if (currentIndex === pathLength - 1) {
+            return pathLength; // end of string
+          }
+          return currentIndex + 1;
+        }
+      }
+      return pathLength; // end of string
+    }
+
+    const toCommandArray = (path) => {
+      for (let i = 0; i < path.length; i++) {
+        // use regex to detect command
+
+      }
+    }
+
+    const cleanPath = (path) => {
+      return path.trim();
+    }
+
+    const convertRelativeToAbsolute = (path) => {
+      if (path[0] === 'M' || path[0] === 'm') {
+        // first m is same as M, remove it
+        path = path.slice(1);
+      }
+
+      if (!path.includes('m')) { // if path does not contain relative coordinates, simply return it
+        return "M".concat(path);
+      }
+
+      let absoluteCoordPath = "";
+      // convert relative coordinates to absolute coordinates
+      const pathArray = path.split('m');
+      pathArray.forEach((subPath, i) => {
+        if (i === 0) { // skip first one
+          return;
+        }
+
+        if (path.trim().slice(-1) === 'z' || path.trim().slice(-1) === 'Z') { // if previous path ends with z
+          // M coordinate should be previous M coordinate + current m coordinate
+          const prevXCoordEndIndex = getNextElementEndIndex(pathArray[i - 1], 0);
+          const prevYCoordEndIndex = getNextElementEndIndex(pathArray[i - 1], prevXCoordEndIndex);
+          const prevXCoord = pathArray[i - 1].slice(0, prevXCoordEndIndex);
+          const prevYCoord = pathArray[i - 1].slice(prevXCoordEndIndex, prevYCoordEndIndex);
+
+          const xCoordEndIndex = getNextElementEndIndex(subPath, 0);
+          const yCoordEndIndex = getNextElementEndIndex(subPath, xCoordEndIndex);
+          const xCoord = subPath.slice(0, xCoordEndIndex);
+          const yCoord = subPath.slice(xCoordEndIndex, yCoordEndIndex);
+
+          let newPath = subPath.slice(yCoordEndIndex);
+
+          const newXCoord = parseFloat(prevXCoord) + parseFloat(xCoord);
+          const newYCoord = parseFloat(prevYCoord) + parseFloat(yCoord);
+
+          newPath = newXCoord + (newYCoord < 0 ? "" : " ") + newYCoord + newPath;
+          absoluteCoordPath += "M" + newPath;
+        }
+      });
+      return absoluteCoordPath;
+    }
 
     const extractPaths = (svgString) => {
       const parser = new DOMParser();
       const svgDoc = parser.parseFromString(svgString, 'image/svg+xml');
-      return Array.from(svgDoc.querySelectorAll('path')).map(path => path.getAttribute('d'));
+      let pathList = Array.from(svgDoc.querySelectorAll('path')).map(path => path.getAttribute('d'));
+      let subPaths = [];
+      pathList.forEach((path, i) => {
+        const cleanedPath = cleanPath(path);
+        const convertedPath = convertRelativeToAbsolute(cleanedPath);
+        // if path contains subpaths, split them into separate paths
+        if (path.includes('M')) {
+          const subPath = path.split('M').filter(subPath => subPath.length > 0);
+          subPaths.push(...subPath);
+        } else {
+          subPaths.push(path);
+        }
+      })
     };
 
-    // const svg1PathList = extractPaths(svg1);
-    // if (svg1PathList.length === 0) {
-    //   console.error('No paths found in svg1');
-    //   return;
-    // }
-
-    // const svg2PathList = extractPaths(svg2);
-    // if (svg2PathList.length === 0) {
-    //   console.error('No paths found in svg2');
-    //   return;
-    // }
-
     const svgPathLists = svgs.map(extractPaths);
+
+    // make all svgs have the same number of paths
+    const maxPaths = Math.max(...svgPathLists.map(pathList => pathList.length));
+    for (let i = 0; i < svgPathLists.length; i++) {
+      if (svgPathLists[i].length < maxPaths) {
+        for (let j = svgPathLists[i].length; j < maxPaths; j++) {
+          svgPathLists[i].push(svgPathLists[i][0]);
+        }
+      }
+    }
+
     if (svgPathLists.some(pathList => pathList.length === 0)) {
       console.error('No paths found in svg');
       return;
@@ -62,39 +159,6 @@ function SVGMorph({ svgs }) {
       animate(0);
     });
 
-
-
-
-    // svg1PathList.forEach((svg1Path, i) => {
-    //   const svg2Path = svg2PathList[i];
-    //   const interpolatorTo2 = interpolate(svg1Path, svg2Path, { maxSegmentLength: 0.1 });
-    //   const interpolatorTo1 = interpolate(svg2Path, svg1Path, { maxSegmentLength: 0.1 });
-
-    //   const path = svg.append('path')
-    //     .attr('d', svg1Path)
-    //     .attr('fill', 'black')
-    //     .attr('id', `path-${i}`);
-
-    //   pathsRef.current.push({ path, interpolatorTo2, interpolatorTo1 });
-
-    //   function animateTo2() {
-    //     d3.select(path.node())
-    //       .transition()
-    //       .duration(2000)
-    //       .attrTween('d', () => interpolatorTo2)
-    //       .on('end', animateTo1);
-    //   }
-
-    //   function animateTo1() {
-    //     d3.select(path.node())
-    //       .transition()
-    //       .duration(2000)
-    //       .attrTween('d', () => interpolatorTo1)
-    //       .on('end', animateTo2);
-    //   }
-
-    //   animateTo2(); // Start the animation initially
-    // });
 
     return () => {
       d3.select(svgRef.current).selectAll('*').interrupt();

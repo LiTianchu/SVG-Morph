@@ -1,7 +1,7 @@
 import React, { useState } from 'react';
 import './App.css';
 import SVGMorph from './SVGMorph';
-import SVGUploader from './SVGUploader';
+import SVGList from './SVGList';
 
 function App() {
   // const [svg1,setSvg1] = useState(null);
@@ -20,11 +20,12 @@ function App() {
   return (
     <div className="App">
       <header className="App-header">
-        <div style={{ display: 'flex', justifyContent: 'space-around', alignItems: 'center', height: '300px' }}>
+        <SVGList onSvgsChange={setSvgs} />
+        {/* <div style={{ display: 'flex', justifyContent: 'space-around', alignItems: 'center', height: '300px' }}>
           <SVGUploader onSvgUploaded={(svg) => handleSvgUpload(0, svg)} />
           <SVGUploader onSvgUploaded={(svg) => handleSvgUpload(1, svg)} />
           <SVGUploader onSvgUploaded={(svg) => handleSvgUpload(2, svg)} />
-        </div>
+        </div> */}
         <SVGMorph svgs={svgs} />
       </header>
     </div>

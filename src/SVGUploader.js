@@ -1,6 +1,6 @@
 import React, { useEffect, useState, useRef } from 'react';
 
-function SVGUploader({ onSvgUploaded }) {
+function SVGUploader({ onSvgUploaded, index }) {
     const [svgContent, setSvgContent] = useState(null);
     const fileInputRef = useRef(null);
     const svgContainerRef = useRef(null);
@@ -66,7 +66,7 @@ function SVGUploader({ onSvgUploaded }) {
     }, [svgContent]);
 
     return (
-        <div>
+        <div class="svg-uploader" id={"svg-uploader" + index}>
             <button
                 style={{
                     width: '300px',
@@ -113,7 +113,7 @@ function SVGUploader({ onSvgUploaded }) {
                 onDrop={handleDrop}
             >
                 {svgContent ? (
-                    <div dangerouslySetInnerHTML={{ __html: svgContent }} style={{width: '100%', height: '100%'}}/>
+                    <div dangerouslySetInnerHTML={{ __html: svgContent }} style={{ width: '100%', height: '100%' }} />
                 ) : (
                     <p>Or Drag and Drop Here</p>
                 )}
