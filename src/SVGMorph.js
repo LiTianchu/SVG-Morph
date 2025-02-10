@@ -1,4 +1,4 @@
-import React, { useEffect, useRef } from 'react';
+import React, { useEffect, useRef,useState } from 'react';
 import * as d3 from 'd3';
 import { interpolate } from 'flubber';
 
@@ -6,10 +6,12 @@ function SVGMorph({ svgs }) {
   const svgRef = useRef(null);
   const canvasRef = useRef(null);
   const pathsRef = useRef([]); // Store path elements to access them from button click
+  const [viewBoxSize,setViewBoxSize] = useState({ x: 0, y: 0 });
   //const interpolatorsRef = useRef([]);
 
   useEffect(() => {
     console.log(svgs);
+    
     //if (!svg1 || !svg2 ||!svg3) return;
     d3.select(svgRef.current).selectAll('*').remove();
     pathsRef.current = []; // Clear previous paths
@@ -24,6 +26,26 @@ function SVGMorph({ svgs }) {
       }
     }
 
+    const computeViewBox = (svgs) => {
+      svgs.forEach(svgString => {
+        const parser = new DOMParser();
+        const svgDoc = parser.parseFromString(svgString, 'image/svg+xml');
+        const svgElement = svgDoc.documentElement;
+
+        const viewBox = svgElement.getAttribute('viewBox');
+        const svgViewBoxSize = viewBox.split(' ').slice(2);
+        let sizeX = viewBoxSize.x;
+        let sizeY = viewBoxSize.y;
+        if (svgViewBoxSize[0] > viewBoxSize.x) {
+          sizeX = svgViewBoxSize[0];
+        }
+        if (svgViewBoxSize[1] > viewBoxSize.y) {
+          sizeY = svgViewBoxSize[1];
+        }
+        setViewBoxSize({ x: sizeX, y: sizeY});
+      });
+    }
+    
     const getNextElementEndIndex = (path, index) => {
       let currentIndex = index;
       const pathLength = path.length;
@@ -33,18 +55,18 @@ function SVGMorph({ svgs }) {
           currentIndex++;
           continue;
         }
-
+        
         if (/^[0-9.-]$/.test(char)) { // if this char marks the start of a positive or negative number
           // get next index of non-number or end of string
           if (char === '-') {
             currentIndex++;
           }
           const nextNonNumberIndex = path.slice(currentIndex).search(/[^0-9.]/);
-
+          
           if (nextNonNumberIndex === -1) { // return end of string
             return pathLength + 1;
           }
-
+          
           return currentIndex + nextNonNumberIndex; // return the end index of the extracted number
         } else { // char is a command
           return currentIndex + 1;
@@ -52,25 +74,25 @@ function SVGMorph({ svgs }) {
       }
       return pathLength + 1; // end of string
     }
-
-
+    
+    
     const cleanPath = (path) => {
       return path.trim();
     }
-
+    
     const convertRelativeToAbsolute = (path) => {
       if (path[0] === 'M' || path[0] === 'm') {
         // first m is same as M, remove it
         path = path.slice(1);
       }
-
+      
       if (!path.includes('m')) { // if path does not contain relative coordinates, simply return it
         return "M".concat(path);
       }
-
+      
       let absoluteCoordPath = "";
       let prevX = 0, prevY = 0;
-
+      
       // convert relative coordinates to absolute coordinates
       //const pathArray = ;
       path.split('m').forEach((subPath, i) => {
@@ -82,53 +104,87 @@ function SVGMorph({ svgs }) {
           absoluteCoordPath += "M" + subPath;
           return;
         }
-
+        
         // if (pathArray[i - 1].trim().slice(-1) !== 'z' && pathArray[i - 1].trim().slice(-1) !== 'Z') { // if previous path is not closed
         //   // TODO: unclosed path handling
         // }
-
+        
         // M coordinate should be previous M coordinate + current m coordinate
         const xCoordEndIndex = getNextElementEndIndex(subPath, 0);
         const yCoordEndIndex = getNextElementEndIndex(subPath, xCoordEndIndex);
         const xCoord = subPath.slice(0, xCoordEndIndex);
         const yCoord = subPath.slice(xCoordEndIndex, yCoordEndIndex);
-
+        
         let newPath = subPath.slice(yCoordEndIndex);
-
+        
         const newXCoord = prevX + parseFloat(xCoord);
         const newYCoord = prevY + parseFloat(yCoord);
         prevX = newXCoord;
         prevY = newYCoord;
-
+        
         newPath = newXCoord + (newYCoord < 0 ? "" : " ") + newYCoord + newPath;
         absoluteCoordPath += "M" + newPath;
       });
-
+      console.log(absoluteCoordPath);
       return absoluteCoordPath;
     }
-
+    
     const extractPaths = (svgString) => {
       const parser = new DOMParser();
       const svgDoc = parser.parseFromString(svgString, 'image/svg+xml');
-      let pathList = Array.from(svgDoc.querySelectorAll('path')).map(path => path.getAttribute('d'));
+      let pathList = Array.from(svgDoc.querySelectorAll(':scope > path')); // selects only path in the direct children
       let extractedPaths = [];
-      pathList.forEach((path, i) => {
+      let extractedMaskPaths = [];
+      
+      //console.log("pathList: " + pathList);
+      pathList.forEach((pathElement, i) => {
+        const path = pathElement.getAttribute('d')
+        
+        // check if path has a mask
+        const maskAttr = pathElement.getAttribute('mask');
+        const maskId = maskAttr != null ? maskAttr.slice(5, -1) : null;
+        console.log("maskid is: " + maskId);
+        
+        if (maskId != null) {
+          const maskElement = svgDoc.getElementById(maskId);
+          const maskPaths = Array.from(maskElement.querySelectorAll('path'));
+          
+          maskPaths.forEach((maskPathElement, i) => {
+            const maskPath = maskPathElement.getAttribute('d');
+            extractedMaskPaths.push(maskPath);
+          });
+        }
+        
+        console.log("mask paths: " + extractedMaskPaths);
+        
         const cleanedPath = cleanPath(path);
         const convertedAbsolutePath = convertRelativeToAbsolute(cleanedPath);
+        
+        // check if the path contains holes as subpaths
+        const fillRule = pathElement.getAttribute('fill-rule');
+        console.log("fill rule: " + fillRule);
+        if (fillRule === 'evenodd') {
+          // extract the holes
+          
+        }
+        
         // if path contains subpaths, split them into separate paths
         if (convertedAbsolutePath.includes('M')) {
           const subPaths = convertedAbsolutePath.split(/(?=M)/).filter(Boolean); // split at each 'M' while keeping it
           extractedPaths.push(...subPaths);
-
         } else {
           extractedPaths.push(convertedAbsolutePath);
         }
+        
       });
+      
+      console.log(extractedPaths);
       return extractedPaths;
     };
-
+    
     const svgPathLists = svgs.map(extractPaths);
-
+    computeViewBox(svgs);
+    
     // make all svgs have the same number of paths
     const maxPaths = Math.max(...svgPathLists.map(pathList => pathList.length));
     for (let i = 0; i < svgPathLists.length; i++) {
@@ -152,14 +208,15 @@ function SVGMorph({ svgs }) {
       const pathElement = d3.select(svgRef.current).append('path')
         .attr('d', path)
         .attr('fill', 'black')
-        .attr('id', `path-${i}`);
+        .attr('id', `path-${i}`)
+        .attr('fill-rule', 'nonzero');
 
       pathsRef.current.push({ pathElement, interpolators });
 
       function animate(interpolatorIdx) {
         d3.select(pathElement.node())
           .transition()
-          .duration(2000)
+          .duration(1000)
           .attrTween('d', () => interpolators[interpolatorIdx])
           .on('end', () => animate((interpolatorIdx + 1) % interpolators.length));
       }
@@ -207,7 +264,7 @@ function SVGMorph({ svgs }) {
 
   return (
     <div style={{ display: 'flex', justifyContent: 'space-around', alignItems: 'center' }}>
-      <svg ref={svgRef} width="500" height="500" viewBox="0 0 30 30"></svg>
+      <svg ref={svgRef} width="100%" height="100%" viewBox={"0 0 " + viewBoxSize.x + " " + viewBoxSize.y}></svg>
       <button onClick={handleFrameExport}>Export Frames</button>
       <canvas ref={canvasRef} width="500" height="500" style={{ display: 'none' }}></canvas>
     </div>
