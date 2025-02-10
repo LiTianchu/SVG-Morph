@@ -83,9 +83,9 @@ function SVGMorph({ svgs }) {
           return;
         }
 
-        if (pathArray[i - 1].trim().slice(-1) !== 'z' && pathArray[i - 1].trim().slice(-1) !== 'Z') { // if previous path is not closed
-          // TODO: unclosed path handling
-        }
+        // if (pathArray[i - 1].trim().slice(-1) !== 'z' && pathArray[i - 1].trim().slice(-1) !== 'Z') { // if previous path is not closed
+        //   // TODO: unclosed path handling
+        // }
 
         // M coordinate should be previous M coordinate + current m coordinate
         const xCoordEndIndex = getNextElementEndIndex(subPath, 0);
