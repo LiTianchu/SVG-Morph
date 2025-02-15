@@ -48,6 +48,23 @@ function SVGMorph({ svgs }) {
       setViewBoxSize({ x: sizeX, y: sizeY });
     }
 
+
+    const computePathCenter = (path) => {
+      // get the bounding box of the path
+      const pathString = path;
+    
+      const tempSvg = document.createElementNS("http://www.w3.org/2000/svg", "svg");
+      document.body.appendChild(tempSvg);
+
+      const tempPath = document.createElementNS("http://www.w3.org/2000/svg", "path");
+      tempPath.setAttribute('d', pathString);
+      tempSvg.appendChild(tempPath);
+
+      const bBox = tempPath.getBBox();
+      document.body.removeChild(tempSvg);
+      return { x: bBox.x + bBox.width / 2, y: bBox.y + bBox.height / 2 };
+    };
+
     const getNextElementEndIndex = (path, index) => {
       let currentIndex = index;
       const pathLength = path.length;
@@ -77,6 +94,10 @@ function SVGMorph({ svgs }) {
       return pathLength + 1; // end of string
     }
 
+    const getVector = (point1, point2) => {
+
+    }
+
 
     const cleanPath = (path) => {
       return path.trim();
@@ -97,6 +118,7 @@ function SVGMorph({ svgs }) {
 
       // convert relative coordinates to absolute coordinates
       //const pathArray = ;
+      // TODO: handle V and H commands
       path.split('m').forEach((subPath, i) => {
         if (i === 0) { // skip first one and record starting point
           const startingXCoordEndIndex = getNextElementEndIndex(subPath, 0);
@@ -186,9 +208,6 @@ function SVGMorph({ svgs }) {
 
           extractedPaths.push(...newPaths);
         }
-        // else {
-        //   extractedPaths.push(convertedAbsolutePath);
-        // }
 
       });
 
@@ -210,15 +229,6 @@ function SVGMorph({ svgs }) {
       for (let j = svgPathLists[i].length; j < maxPaths; j++) {
         svgPathLists[i].push(svgPathLists[i][0]); // duplicate the first path
       }
-
-
-      // for (let j = 0; j < svgPathLists[i].length; j++) {
-      //   const path = svgPathLists[i][j];
-      //   for (let k = path.maskPaths.length; k < maxMaskPaths; k++) {
-      //     // create a empty mask path
-      //     svgPathLists[i][j].maskPaths.push("M0,0 Z");
-      //   }
-      // }
     }
 
 
@@ -230,10 +240,12 @@ function SVGMorph({ svgs }) {
 
 
     svgPathLists[0].forEach((mainMaskPair, i) => {
+      let firstMainPath = mainMaskPair.mainPath;
       let firstMainPathMasks = [];
       for (let k = 0; k < maxMaskPathsNum; k++) {
         if (mainMaskPair.maskPaths[k] == null) {
-          firstMainPathMasks.push("M0,0 Z");
+          const center = computePathCenter(firstMainPath);
+          firstMainPathMasks.push(`M${center.x},${center.y} Z`);
         } else {
           firstMainPathMasks.push(mainMaskPair.maskPaths[k]);
         }
@@ -255,7 +267,10 @@ function SVGMorph({ svgs }) {
           if (path.maskPaths[k] == null) {
             // create a empty mask path
             console.log("from: empty mask path");
-            fromPathList.push("M0,0 Z");
+            const center = computePathCenter(path.mainPath);
+            // add an empty path at the certer
+            fromPathList.push(`M${center.x},${center.y} Z`);
+
           } else {
             console.log("from: " + path.maskPaths[k]);
             fromPathList.push(path.maskPaths[k]);
@@ -264,7 +279,9 @@ function SVGMorph({ svgs }) {
           if (nextPairPath.maskPaths[k] == null) {
             // create a empty mask path
             console.log("to: empty mask path");
-            toPathList.push("M0,0 Z");
+            const center = computePathCenter(nextPairPath.mainPath);
+            // add an empty path at the certer
+            toPathList.push(`M${center.x},${center.y} Z`);
           }
           else {
             console.log("to: " + nextPairPath.maskPaths[k]);
@@ -272,12 +289,6 @@ function SVGMorph({ svgs }) {
           }
 
         }
-        // path.maskPaths.forEach((maskPath, k) => {
-        //   fromPathList.push(maskPath);
-        // });
-        // nextPairPath.maskPaths.forEach((maskPath, k) => {
-        //   toPathList.push(maskPath);
-        // });
 
         console.log("from path list: " + fromPathList);
         console.log("to path list: " + toPathList);
@@ -296,25 +307,25 @@ function SVGMorph({ svgs }) {
       });
       const maskTagElement = d3.select(svgRef.current).append('mask')
         .attr('id', `mask-${i}`)
-
-      maskTagElement.append('rect')
+        
+        maskTagElement.append('rect')
         .attr('width', '16')
         .attr('height', '16')
         .attr('fill', 'white')
-
-
-      firstMainPathMasks.forEach((maskPath, k) => {
-        maskTagElement.append('path')
+        
+        
+        firstMainPathMasks.forEach((maskPath, k) => {
+          maskTagElement.append('path')
           .attr('d', maskPath)
           .attr('fill', 'black')
-      });
-
-      const pathElement = d3.select(svgRef.current).append('path')
-        .attr('d', mainMaskPair.mainPath)
-        .attr('fill', 'black')
-        .attr('id', `path-${i}`)
-        .attr('fill-rule', 'nonzero')
-        .attr('mask', `url(#mask-${i})`);
+        });
+        
+        const pathElement = d3.select(svgRef.current).append('path')
+          .attr('d', firstMainPath)
+          .attr('fill', 'black')
+          .attr('id', `path-${i}`)
+          .attr('fill-rule', 'nonzero')
+          .attr('mask', `url(#mask-${i})`);
 
 
       pathsRef.current.push({ pathElement, interpolators });

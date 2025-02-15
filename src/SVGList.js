@@ -10,6 +10,7 @@ function SVGList({ onSvgsChange }) {
             const newSvgs = [...prevSvgs];
             newSvgs[index] = svg;
             onSvgsChange(newSvgs);
+            addUploader();
             return newSvgs;
         });
     }
@@ -27,17 +28,18 @@ function SVGList({ onSvgsChange }) {
         setUploaders([...uploaders, { id: uploaders.length }]);
     }
 
-    return (
-        <div style={{ display: 'flex', flexDirection: 'column', alignItems: 'center' }} className="svg-list">
+    
+      return (
+        <div style={{ display: 'grid', gridTemplateColumns: 'repeat(auto-fill, minmax(350px, 1fr))', gap: '10px', gridAutoFlow: 'column'}} className="svg-list">
             {
                 uploaders.map((uploader, index) => (
-                    <div key={uploader.id} style={{ display: 'flex', alignItems: 'center', marginBottom: '10px' }}>
+                    <div key={uploader.id} style={{ display: 'flex', flexDirection: 'column', alignItems: 'center' }}>
                         <SVGUploader onSvgUploaded={(svg) => handleSvgUploaded(svg, index)} index={index} />
-                        <button onClick={() => removeUploader(uploader.id)} style={{ marginLeft: '10px' }}>Remove</button>
+                        <button onClick={() => removeUploader(uploader.id)} style={{ marginTop: '10px' }}>Remove</button>
                     </div>
                 ))
             }
-            <button onClick={addUploader} style={{ marginTop: '20px' }}>Add SVG +</button>
+        
         </div>
     );
 }
