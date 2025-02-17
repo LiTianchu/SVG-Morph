@@ -34,7 +34,7 @@ function SVGMorph({ svgs }) {
       const pathLength = tempPath.getTotalLength();
       let points = [];
 
-      for (let i = 0; i < pathLength; i += 5) { // Sample points every 5 units
+      for (let i = 0; i < pathLength; i += 1) { // Sample points every 1 units
         let { x, y } = tempPath.getPointAtLength(i);
         points.push([x, y]);
       }
@@ -65,14 +65,19 @@ function SVGMorph({ svgs }) {
       setViewBoxSize({ x: sizeX, y: sizeY });
     }
 
-    const getWindingOrder = (points) => {
+    function getWindingOrder(points) {
       let sum = 0;
+      // calculate signed area using shoelace theorem
       for (let i = 0; i < points.length; i++) {
         let [x1, y1] = points[i];
-        let [x2, y2] = points[(i + 1) % points.length];
-        sum += (x2 - x1) * (y2 + y1);
+        let [x2, y2] = points[(i + 1) % points.length]; // loop back at the end
+        sum += x1 * y2 - x2 * y1;
+        //console.log(`signed area at ${i}: ${x1} * ${y2} - ${x2} * ${y1} = ${x1 * y2 - x2 * y1}`);
       }
-      return sum > 0 ? "CW" : "CCW"; // CW = Outer, CCW = Hole
+
+      // note: in normal cartesian coordinates positive signed area = CCW, negative signed area = CW
+      // but svg uses inverted y axis, so the result is inverted
+      return sum > 0 ? "CW" : "CCW"; 
     }
 
     const computePathCenter = (path) => {
@@ -93,16 +98,16 @@ function SVGMorph({ svgs }) {
 
     const isPathHole = (path, pathList, fillrule) => {
       const pathPoints = getPathPoints(path);
-      //console.log("Path points: " + pathPoints);
+      console.log("Path points: " + pathPoints);
       if (fillrule == null) {
         return false;
       } else if (fillrule === 'evenodd') {
         // use point in polygon algorithm to determine if the path is a hole
 
-      }else if(fillrule === 'nonzero'){
+      } else if (fillrule === 'nonzero') {
         const windingOrder = getWindingOrder(pathPoints);
-        console.log("winding order: " + windingOrder);
-        if (windingOrder === "CW") {
+        console.log("winding order: " + windingOrder + " \n" + "path: " + path);
+        if (windingOrder === "CCW") {
           return true;
         }
       }
