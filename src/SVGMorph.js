@@ -77,7 +77,7 @@ function SVGMorph({ svgs }) {
       setViewBoxSize({ x: sizeX, y: sizeY });
     }
 
-    const getWidthHeight= (svgElement) => {
+    const getWidthHeight = (svgElement) => {
       const width = svgElement.width.baseVal.value || parseFloat(svgElement.getAttribute('width')) || svgElement.viewBox.baseVal.width;
       const height = svgElement.height.baseVal.value || parseFloat(svgElement.getAttribute('height')) || svgElement.viewBox.baseVal.height;
       return { width: width, height: height };
@@ -545,35 +545,65 @@ function SVGMorph({ svgs }) {
   }, [svgs]);
 
   // Button click handler to start animation on all paths
-  function handleFrameExport() {
-    const numFrames = 5;
+  const handleFrameExport = () => {
     const context = canvasRef.current.getContext('2d');
     const svg = d3.select(svgRef.current);
+    console.log(pathsRef.current);
+    const numOfMorphs = pathsRef.current[0].interpolators.length;
+    const numOfMaskPathsPerNormalPath = pathsRef.current[0].interpolators[0].maskPathInterpolators.length;
+    console.log("num of morphs: " + numOfMorphs);
 
-    // Create frames at intervals from 0 to 1
-    const frames = Array.from({ length: numFrames }, (_, i) => i / (numFrames - 1)); // frames = [0, 0.25, 0.5, 0.75, 1];
-    frames.forEach((t, frameIndex) => {
-      svg.selectAll('path').each(function (d, i) {
-        const path = d3.select(this);
-        const interpolator = pathsRef.current[i].interpolatorTo2;
-        path.attr('d', interpolator(t));
+    const downloadQueue = [];
+    for (let m = 0; m < numOfMorphs; m++) {
+      // Create frames at intervals from 0 to 1
+      const numFrames = 20;
+      const frames = Array.from({ length: numFrames }, (_, i) => i / (numFrames - 1)); // frames = [0, 0.25, 0.5, 0.75, 1];
+      frames.forEach((t, frameIndex) => {
+        svg.selectAll(':scope > path').each(function (_, i) {
+          const path = d3.select(this);
+          //console.log(i);
+          //console.log(pathsRef.current[i]);
+          const interpolators = pathsRef.current[i].interpolators;
+          // print the interpolators object
+          console.log("m: " + m);
+          console.log(interpolators);
+          path.attr('d', interpolators[m].mainPathInterpolator(t));
+          path.attr('fill', interpolators[m].fillColorInterpolator(t));
+        });
+
+        // interpolate mask paths
+        svg.selectAll('mask path').each(function (_, i) {
+          const maskPath = d3.select(this);
+          const pathIndex = Math.floor(i/numOfMaskPathsPerNormalPath);
+          const maskPathIndex = i % numOfMaskPathsPerNormalPath;
+          const interpolators = pathsRef.current[pathIndex].interpolators;
+          maskPath.attr('d', interpolators[m].maskPathInterpolators[maskPathIndex](t));
+        });
+
+        const svgData = new XMLSerializer().serializeToString(svgRef.current);
+        const img = new Image();
+        img.src = `data:image/svg+xml;base64,${btoa(svgData)}`;
+
+        downloadQueue.push({ img,  m, frameIndex });
       });
+    }
 
-      const svgData = new XMLSerializer().serializeToString(svgRef.current);
-      const img = new Image();
-      img.src = `data:image/svg+xml;base64,${btoa(svgData)}`;
+    const processQueue = () => {
+      if (downloadQueue.length === 0) { return; }
 
-      img.onload = () => {
-        context.clearRect(0, 0, canvasRef.current.width, canvasRef.current.height);
-        context.drawImage(img, 0, 0);
-        const pngDataUrl = canvasRef.current.toDataURL('image/png');
+      const {img, m, frameIndex} = downloadQueue.shift(); // dequeue by remove first element from the array
+          console.log("image downloaded: " + `image-morph${m}-frame${frameIndex}.png`);
+          context.clearRect(0, 0, canvasRef.current.width, canvasRef.current.height);
+          context.drawImage(img, 0, 0);
+          const pngDataUrl = canvasRef.current.toDataURL('image/png');
+          const link = document.createElement('a');
+          link.href = pngDataUrl;
+          link.download = `image-morph${m}-frame${frameIndex}.png`;
+          link.click();
+          setTimeout(processQueue, 100); // Process the next item in the queue after a short delay
+    }
 
-        const link = document.createElement('a');
-        link.href = pngDataUrl;
-        link.download = `frame-${frameIndex}.png`;
-        link.click();
-      };
-    });
+    processQueue();
   }
 
   return (
