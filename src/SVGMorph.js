@@ -14,7 +14,7 @@ function SVGMorph({ svgs }) {
 
     //if (!svg1 || !svg2 ||!svg3) return;
     d3.select(svgRef.current).selectAll('*').remove();
-    pathsRef.current = []; // Clear previous paths
+    pathsRef.current = []; // clear previous paths
     if (!svgs || svgs.length < 2) {
       return;
     }
@@ -34,7 +34,7 @@ function SVGMorph({ svgs }) {
       const pathLength = tempPath.getTotalLength();
       let points = [];
 
-      for (let i = 0; i < pathLength; i += 1) { // Sample points every 1 units
+      for (let i = 0; i < pathLength; i += 1) { // sample points every 1 units
         let { x, y } = tempPath.getPointAtLength(i);
         points.push([x, y]);
       }
@@ -80,7 +80,7 @@ function SVGMorph({ svgs }) {
     }
 
     const pointArrToVector = (point) => {
-      return {x: point[0], y: point[1]}
+      return { x: point[0], y: point[1] }
     }
 
     const countPointPolygonIntersection = (point, polygonPaths) => {
@@ -146,27 +146,30 @@ function SVGMorph({ svgs }) {
       return { x: bBox.x + bBox.width / 2, y: bBox.y + bBox.height / 2 };
     };
 
-    const isPathHole = (path, pathList, fillrule) => {
+    const isPathHole = (path, pathList, outerContour, fillrule) => {
       const pathPoints = getPathPoints(path);
-      console.log("Path points: " + pathPoints);
+      const outerContourPoints = getPathPoints(outerContour);
+      const outerContourWindingOrder = getWindingOrder(outerContourPoints);
+
+      //console.log("Path points: " + pathPoints);
+      const filteredPaths = pathList.filter(p => p != path);
+      const selectedPoint = pathPoints[0];
+      //console.log("selected point: " + selectedPoint);
+      //console.log("filtered paths: " + filteredPaths);
+      const numOfIntersections = countPointPolygonIntersection(selectedPoint, filteredPaths.map(path => getPathPoints(path)));
+      console.log("num of intersections: " + numOfIntersections);
+
       if (fillrule == null) {
         return false;
       } else if (fillrule === 'evenodd') {
         // use point in polygon algorithm to determine if the path is a hole
         // if the point is inside an odd number of polygons except itself, it is a hole
-        const filteredPaths = pathList.filter(p => p != path);
-        const selectedPoint = pathPoints[0];
-        console.log("selected point: " + selectedPoint);
-        console.log("filtered paths: " + filteredPaths);
-        const numOfIntersections = countPointPolygonIntersection(selectedPoint, filteredPaths.map(path => getPathPoints(path)));
-        console.log("num of intersections: " + numOfIntersections);
         return numOfIntersections % 2 === 1;
       } else if (fillrule === 'nonzero') {
         const windingOrder = getWindingOrder(pathPoints);
         console.log("winding order: " + windingOrder + " \n" + "path: " + path);
-        if (windingOrder === "CCW") {
-          return true;
-        }
+        // if the point is inside an odd number of polygons except itself plus the outer coutour has different winding order, it is a hole
+        return windingOrder !== outerContourWindingOrder && numOfIntersections % 2 === 1;
       }
     }
 
@@ -176,13 +179,14 @@ function SVGMorph({ svgs }) {
       while (currentIndex < pathLength) {
         const char = path[currentIndex];
         if (char === ' ' || char === ',') {
+          // replace comma with space
           currentIndex++;
           continue;
         }
 
         if (/^[0-9.-]$/.test(char)) { // if this char marks the start of a positive or negative number
           // get next index of non-number or end of string
-          if (char === '-') {
+          if (char === '-' || char === '+') { // skip the sign
             currentIndex++;
           }
           const nextNonNumberIndex = path.slice(currentIndex).search(/[^0-9.]/);
@@ -208,48 +212,68 @@ function SVGMorph({ svgs }) {
       // trim spaces
       path = path.trim();
 
-      if (path[0] === 'M' || path[0] === 'm') {
-        // first m is same as M, remove it
-        path = path.slice(1);
-      }
+      // replace all comma with space
+      path = path.replace(/,/g, ' ');
+
+      // if (path[0] === 'M' || path[0] === 'm') {
+      //   // first m is same as M, remove it
+      //   path = path.slice(1);
+      // }
 
       if (!path.includes('m')) { // if path does not contain relative coordinates, simply return it
-        return "M".concat(path);
+        return path;
       }
 
       let absoluteCoordPath = "";
       let prevX = 0, prevY = 0;
 
       // convert relative coordinates to absolute coordinates
-      path.split('m').forEach((subPath, i) => {
+      // split m or M
+
+      path.split(/(?=[mM])/).forEach((subPath, i) => {
+        const command = subPath[0];
+        subPath = subPath.slice(1); // remove the command
+
         if (subPath.trim().slice(-1) !== 'z' && subPath.trim().slice(-1) !== 'Z') { // if this path is not closed
           subPath += "Z"; // close the path
         }
-        if (i === 0) { // skip first one and record starting point
+        if (command==='M') { // skip first one and record starting point
           const startingXCoordEndIndex = getNextElementEndIndex(subPath, 0);
           const startingYCoordEndIndex = getNextElementEndIndex(subPath, startingXCoordEndIndex);
           prevX = parseFloat(subPath.slice(0, startingXCoordEndIndex));
           prevY = parseFloat(subPath.slice(startingXCoordEndIndex, startingYCoordEndIndex));
+          console.log("subpath: " + subPath);
+          //console.log(subPath.slice(startingXCoordEndIndex, startingYCoordEndIndex));
+          console.log("startingXCoordEndIndex: " + startingXCoordEndIndex);
+          console.log("startingYCoordEndIndex: " + startingYCoordEndIndex);
+          console.log("starting point: " + prevX + "," + prevY);
           absoluteCoordPath += "M" + subPath;
           return;
         }
 
 
-        // M coordinate should be previous M coordinate + current m coordinate
-        const xCoordEndIndex = getNextElementEndIndex(subPath, 0);
-        const yCoordEndIndex = getNextElementEndIndex(subPath, xCoordEndIndex);
-        const xCoord = subPath.slice(0, xCoordEndIndex);
-        const yCoord = subPath.slice(xCoordEndIndex, yCoordEndIndex);
+        if (command === 'm') {
+          // M coordinate should be previous M coordinate + current m coordinate
+          const xCoordEndIndex = getNextElementEndIndex(subPath, 0);
+          const yCoordEndIndex = getNextElementEndIndex(subPath, xCoordEndIndex);
+          const xCoord = subPath.slice(0, xCoordEndIndex);
+          const yCoord = subPath.slice(xCoordEndIndex, yCoordEndIndex);
 
-        let newPath = subPath.slice(yCoordEndIndex);
+          let newPath = subPath.slice(yCoordEndIndex);
 
-        const newXCoord = prevX + parseFloat(xCoord);
-        const newYCoord = prevY + parseFloat(yCoord);
-        prevX = newXCoord;
-        prevY = newYCoord;
+          const newXCoord = prevX + parseFloat(xCoord);
+          const newYCoord = prevY + parseFloat(yCoord);
+          prevX = newXCoord;
+          prevY = newYCoord;
 
-        newPath = newXCoord + (newYCoord < 0 ? "" : " ") + newYCoord + newPath;
-        absoluteCoordPath += "M" + newPath;
+          newPath = newXCoord + (newYCoord < 0 ? "" : " ") + newYCoord + newPath;
+          absoluteCoordPath += "M" + newPath;
+          console.log("command is m therefore converted new absolute path: \n" + "M" + newPath);
+        } else {
+          absoluteCoordPath += "M" + subPath;
+          console.log("command is M therefore old subpath: \n" + "M" + subPath);
+
+        }
       });
       console.log(absoluteCoordPath);
       return absoluteCoordPath;
@@ -295,10 +319,22 @@ function SVGMorph({ svgs }) {
 
           // check if the path contains holes as subpaths
           const fillRule = pathElement.getAttribute('fill-rule');
-          //console.log("fill rule: " + fillRule);
+          let outerContour = null;
+
+          subPaths.forEach(subPath => {
+            const selectedPoint = getPathPoints(subPath)[0];
+            const filteredPaths = subPaths.filter(p => p != subPath);
+            const numOfIntersections = countPointPolygonIntersection(selectedPoint, filteredPaths.map(path => getPathPoints(path)));
+            if (numOfIntersections % 2 === 0) { // if the point is outside an even number of polygon line segments, it is the outer contour
+              outerContour = subPath;
+              console.log("found outer contour: " + outerContour);
+              return;
+            }
+          });
+
           subPaths.forEach(subPath => {
             // if the subpath is a hole, add it to the mask paths
-            if (isPathHole(subPath, subPaths, fillRule)) {
+            if (isPathHole(subPath, subPaths, outerContour, fillRule)) {
               currentPathMasks.push(subPath);
             }
           });
@@ -332,8 +368,6 @@ function SVGMorph({ svgs }) {
       }
     }
 
-
-
     if (svgPathLists.some(pathList => pathList.length === 0)) {
       console.error('No paths found in svg');
       return;
@@ -361,33 +395,33 @@ function SVGMorph({ svgs }) {
 
         //const maskPaths = Math.max(path.maskPaths.length, nextPairPath.maskPaths.length);
         //console.log("mask paths: " + maxMaskPathsNum);
-        console.log("from main path: " + path.mainPath);
-        console.log("to main path: " + nextPairPath.mainPath);
-        console.log("mask paths: " + path.maskPaths);
-        console.log("next pair mask paths: " + nextPairPath.maskPaths);
+        //console.log("from main path: " + path.mainPath);
+        //console.log("to main path: " + nextPairPath.mainPath);
+        //console.log("mask paths: " + path.maskPaths);
+        //console.log("next pair mask paths: " + nextPairPath.maskPaths);
 
         for (let k = 0; k < maxMaskPathsNum; k++) {
           if (path.maskPaths[k] == null) {
             // create a empty mask path
-            console.log("from: empty mask path");
+            //console.log("from: empty mask path");
             const center = computePathCenter(path.mainPath);
             // add an empty path at the certer
             fromPathList.push(`M${center.x},${center.y} Z`);
 
           } else {
-            console.log("from: " + path.maskPaths[k]);
+            //console.log("from: " + path.maskPaths[k]);
             fromPathList.push(path.maskPaths[k]);
           }
 
           if (nextPairPath.maskPaths[k] == null) {
             // create a empty mask path
-            console.log("to: empty mask path");
+            //console.log("to: empty mask path");
             const center = computePathCenter(nextPairPath.mainPath);
             // add an empty path at the certer
             toPathList.push(`M${center.x},${center.y} Z`);
           }
           else {
-            console.log("to: " + nextPairPath.maskPaths[k]);
+            //console.log("to: " + nextPairPath.maskPaths[k]);
             toPathList.push(nextPairPath.maskPaths[k]);
           }
 
