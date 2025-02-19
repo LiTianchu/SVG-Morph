@@ -96,15 +96,15 @@ function SVGMorph({ svgs }) {
           const vertex2 = pointArrToVector(polygon[(i + 1) % polygon.length]);
           let [p1, p2] = vertex1.y < vertex2.y ? [vertex1, vertex2] : [vertex2, vertex1]; // keep p1 above p2 (inverted y axis, so vertex1 is above if the y value is lesser)
 
-          console.log("p1: " + p1 + " p2: " + p2);
           if (ray < p1.y || ray >= p2.y) { // ray is above or below the line segment, does not count
-            console.log("ray is above or below the line segment, does not count");
+            //console.log("ray is above or below the line segment, does not count");
             continue;
           }
           if (point.x > Math.max(p1.x, p2.x)) { // ray is to the right of the line segment, does not count
-            console.log("ray is to the right of the line segment, does not count");
+            //console.log("ray is to the right of the line segment, does not count");
             continue;
           }
+          console.log(`found segment within boundary p1: (${p1.x},${p1.y}) p2: (${p2.x},${p2.y})`);
 
           const xDiff = p2.x - p1.x;
           if (xDiff === 0) { // vertical line
