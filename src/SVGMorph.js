@@ -44,26 +44,63 @@ function SVGMorph({ svgs }) {
     }
 
     const computeViewBox = (svgs) => {
-      let sizeX = viewBoxSize.x;
-      let sizeY = viewBoxSize.y;
+
+      let sizeX = 0;
+      let sizeY = 0;
       svgs.forEach(svgString => {
         const parser = new DOMParser();
         const svgDoc = parser.parseFromString(svgString, 'image/svg+xml');
         const svgElement = svgDoc.documentElement;
 
         const viewBox = svgElement.getAttribute('viewBox');
-        const svgViewBoxSize = viewBox.split(' ').slice(2);
-        console.log("viewbox size: " + svgViewBoxSize);
-        if (parseFloat(svgViewBoxSize[0]) > sizeX) {
-          sizeX = svgViewBoxSize[0];
-        }
-        if (parseFloat(svgViewBoxSize[1]) > sizeY) {
-          sizeY = svgViewBoxSize[1];
+        if (viewBox != null) {
+
+          const svgViewBoxSize = viewBox.split(' ').slice(2);
+          console.log("viewbox size: " + svgViewBoxSize);
+          if (parseFloat(svgViewBoxSize[0]) > sizeX) {
+            sizeX = svgViewBoxSize[0];
+          }
+          if (parseFloat(svgViewBoxSize[1]) > sizeY) {
+            sizeY = svgViewBoxSize[1];
+          }
+        } else {
+          const { width, height } = getWidthHeight(svgElement);
+          if (width > sizeX) {
+            sizeX = width;
+          }
+          if (height > sizeY) {
+            sizeY = height;
+          }
         }
 
       });
       setViewBoxSize({ x: sizeX, y: sizeY });
     }
+
+    const getWidthHeight= (svgElement) => {
+      const width = svgElement.width.baseVal.value || parseFloat(svgElement.getAttribute('width')) || svgElement.viewBox.baseVal.width;
+      const height = svgElement.height.baseVal.value || parseFloat(svgElement.getAttribute('height')) || svgElement.viewBox.baseVal.height;
+      return { width: width, height: height };
+    }
+
+    const getBBox = (path) => {
+      const tempSvg = document.createElementNS("http://www.w3.org/2000/svg", "svg");
+      document.body.appendChild(tempSvg);
+
+      const tempPath = document.createElementNS("http://www.w3.org/2000/svg", "path");
+      tempPath.setAttribute('d', path);
+      tempSvg.appendChild(tempPath);
+
+      const bBox = tempPath.getBBox();
+      document.body.removeChild(tempSvg);
+      return bBox;
+    }
+
+    const computePathCenter = (path) => {
+      // get the bounding box of the path
+      const bBox = getBBox(path);
+      return { x: bBox.x + bBox.width / 2, y: bBox.y + bBox.height / 2 };
+    };
 
     const getWindingOrder = (points) => {
       let sum = 0;
@@ -130,21 +167,7 @@ function SVGMorph({ svgs }) {
 
 
 
-    const computePathCenter = (path) => {
-      // get the bounding box of the path
-      const pathString = path;
 
-      const tempSvg = document.createElementNS("http://www.w3.org/2000/svg", "svg");
-      document.body.appendChild(tempSvg);
-
-      const tempPath = document.createElementNS("http://www.w3.org/2000/svg", "path");
-      tempPath.setAttribute('d', pathString);
-      tempSvg.appendChild(tempPath);
-
-      const bBox = tempPath.getBBox();
-      document.body.removeChild(tempSvg);
-      return { x: bBox.x + bBox.width / 2, y: bBox.y + bBox.height / 2 };
-    };
 
     const isPathHole = (path, pathList, outerContour, fillrule) => {
       const pathPoints = getPathPoints(path);
@@ -210,14 +233,8 @@ function SVGMorph({ svgs }) {
     const cleanPath = (path) => {
       // trim spaces
       path = path.trim();
-
       // replace all comma with space
       path = path.replace(/,/g, ' ');
-
-      // if (path[0] === 'M' || path[0] === 'm') {
-      //   // first m is same as M, remove it
-      //   path = path.slice(1);
-      // }
 
       if (!path.includes('m')) { // if path does not contain relative coordinates, simply return it
         return path;
@@ -227,9 +244,7 @@ function SVGMorph({ svgs }) {
       let prevX = 0, prevY = 0;
 
       // convert relative coordinates to absolute coordinates
-      // split m or M
-
-      path.split(/(?=[mM])/).forEach((subPath, i) => {
+      path.split(/(?=[mM])/).forEach((subPath, i) => { // split m or M while keeping it
         const command = subPath[0];
         subPath = subPath.slice(1); // remove the command
 
@@ -241,11 +256,11 @@ function SVGMorph({ svgs }) {
           const startingYCoordEndIndex = getNextElementEndIndex(subPath, startingXCoordEndIndex);
           prevX = parseFloat(subPath.slice(0, startingXCoordEndIndex));
           prevY = parseFloat(subPath.slice(startingXCoordEndIndex, startingYCoordEndIndex));
-          console.log("subpath: " + subPath);
+          //console.log("subpath: " + subPath);
           //console.log(subPath.slice(startingXCoordEndIndex, startingYCoordEndIndex));
-          console.log("startingXCoordEndIndex: " + startingXCoordEndIndex);
-          console.log("startingYCoordEndIndex: " + startingYCoordEndIndex);
-          console.log("starting point: " + prevX + "," + prevY);
+          //console.log("startingXCoordEndIndex: " + startingXCoordEndIndex);
+          //console.log("startingYCoordEndIndex: " + startingYCoordEndIndex);
+          //console.log("starting point: " + prevX + "," + prevY);
           absoluteCoordPath += "M" + subPath;
           return;
         }
@@ -267,14 +282,14 @@ function SVGMorph({ svgs }) {
 
           newPath = newXCoord + (newYCoord < 0 ? "" : " ") + newYCoord + newPath;
           absoluteCoordPath += "M" + newPath;
-          console.log("command is m therefore converted new absolute path: \n" + "M" + newPath);
+          //console.log("command is m therefore converted new absolute path: \n" + "M" + newPath);
         } else {
           absoluteCoordPath += "M" + subPath;
-          console.log("command is M therefore old subpath: \n" + "M" + subPath);
+          //console.log("command is M therefore old subpath: \n" + "M" + subPath);
 
         }
       });
-      console.log(absoluteCoordPath);
+      //console.log(absoluteCoordPath);
       return absoluteCoordPath;
     }
 
@@ -291,7 +306,7 @@ function SVGMorph({ svgs }) {
             fillColor = fillValue;
           }
         }
-      
+
       }
       return fillColor;
     }
@@ -313,7 +328,7 @@ function SVGMorph({ svgs }) {
         if (color == null) {
           color = parentFillColor;
         }
-       
+
 
         // check if path has a mask
         const maskAttr = pathElement.getAttribute('mask');
