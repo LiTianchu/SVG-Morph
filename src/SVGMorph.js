@@ -65,20 +65,70 @@ function SVGMorph({ svgs }) {
       setViewBoxSize({ x: sizeX, y: sizeY });
     }
 
-    function getWindingOrder(points) {
+    const getWindingOrder = (points) => {
       let sum = 0;
       // calculate signed area using shoelace theorem
       for (let i = 0; i < points.length; i++) {
         let [x1, y1] = points[i];
         let [x2, y2] = points[(i + 1) % points.length]; // loop back at the end
         sum += x1 * y2 - x2 * y1;
-        //console.log(`signed area at ${i}: ${x1} * ${y2} - ${x2} * ${y1} = ${x1 * y2 - x2 * y1}`);
       }
 
       // note: in normal cartesian coordinates positive signed area = CCW, negative signed area = CW
       // but svg uses inverted y axis, so the result is inverted
-      return sum > 0 ? "CW" : "CCW"; 
+      return sum > 0 ? "CW" : "CCW";
     }
+
+    const pointArrToVector = (point) => {
+      return {x: point[0], y: point[1]}
+    }
+
+    const countPointPolygonIntersection = (point, polygonPaths) => {
+      //console.log("point: " + point);
+      //console.log("polygon paths: " + polygonPaths);
+      point = pointArrToVector(point);
+      const ray = point.y; // horizontal ray y = point.y, assuming ray is pointing right
+      console.log("ray: " + ray);
+      let intersectionCount = 0;
+      polygonPaths.forEach(polygon => {
+        for (let i = 0; i < polygon.length; i++) {
+          const vertex1 = pointArrToVector(polygon[i]);
+          const vertex2 = pointArrToVector(polygon[(i + 1) % polygon.length]);
+          let [p1, p2] = vertex1.y < vertex2.y ? [vertex1, vertex2] : [vertex2, vertex1]; // keep p1 above p2 (inverted y axis, so vertex1 is above if the y value is lesser)
+
+          console.log("p1: " + p1 + " p2: " + p2);
+          if (ray < p1.y || ray >= p2.y) { // ray is above or below the line segment, does not count
+            console.log("ray is above or below the line segment, does not count");
+            continue;
+          }
+          if (point.x > Math.max(p1.x, p2.x)) { // ray is to the right of the line segment, does not count
+            console.log("ray is to the right of the line segment, does not count");
+            continue;
+          }
+
+          const xDiff = p2.x - p1.x;
+          if (xDiff === 0) { // vertical line
+            intersectionCount++;
+          } else {
+            // construct the line equation
+            const m = (p2.y - p1.y) / xDiff;
+            const c = p1.y - m * p1.x;
+
+            if (m === 0) { // horizontal line, does not count
+              continue;
+            } else { //normal condition
+              const intersectX = (ray - c) / m;
+              if (intersectX > point.x) {
+                intersectionCount++;
+              }
+            }
+          }
+        }
+      });
+      return intersectionCount;
+    }
+
+
 
     const computePathCenter = (path) => {
       // get the bounding box of the path
@@ -103,7 +153,14 @@ function SVGMorph({ svgs }) {
         return false;
       } else if (fillrule === 'evenodd') {
         // use point in polygon algorithm to determine if the path is a hole
-
+        // if the point is inside an odd number of polygons except itself, it is a hole
+        const filteredPaths = pathList.filter(p => p != path);
+        const selectedPoint = pathPoints[0];
+        console.log("selected point: " + selectedPoint);
+        console.log("filtered paths: " + filteredPaths);
+        const numOfIntersections = countPointPolygonIntersection(selectedPoint, filteredPaths.map(path => getPathPoints(path)));
+        console.log("num of intersections: " + numOfIntersections);
+        return numOfIntersections % 2 === 1;
       } else if (fillrule === 'nonzero') {
         const windingOrder = getWindingOrder(pathPoints);
         console.log("winding order: " + windingOrder + " \n" + "path: " + path);
@@ -111,8 +168,6 @@ function SVGMorph({ svgs }) {
           return true;
         }
       }
-
-
     }
 
     const getNextElementEndIndex = (path, index) => {
@@ -145,15 +200,14 @@ function SVGMorph({ svgs }) {
     }
 
     const getVector = (point1, point2) => {
-
+      return { x: point2.x - point1.x, y: point2.y - point1.y };
     }
 
 
     const cleanPath = (path) => {
-      return path.trim();
-    }
+      // trim spaces
+      path = path.trim();
 
-    const convertRelativeToAbsolute = (path) => {
       if (path[0] === 'M' || path[0] === 'm') {
         // first m is same as M, remove it
         path = path.slice(1);
@@ -167,8 +221,10 @@ function SVGMorph({ svgs }) {
       let prevX = 0, prevY = 0;
 
       // convert relative coordinates to absolute coordinates
-      //const pathArray = ;
       path.split('m').forEach((subPath, i) => {
+        if (subPath.trim().slice(-1) !== 'z' && subPath.trim().slice(-1) !== 'Z') { // if this path is not closed
+          subPath += "Z"; // close the path
+        }
         if (i === 0) { // skip first one and record starting point
           const startingXCoordEndIndex = getNextElementEndIndex(subPath, 0);
           const startingYCoordEndIndex = getNextElementEndIndex(subPath, startingXCoordEndIndex);
@@ -178,9 +234,6 @@ function SVGMorph({ svgs }) {
           return;
         }
 
-        // if (pathArray[i - 1].trim().slice(-1) !== 'z' && pathArray[i - 1].trim().slice(-1) !== 'Z') { // if previous path is not closed
-        //   // TODO: unclosed path handling
-        // }
 
         // M coordinate should be previous M coordinate + current m coordinate
         const xCoordEndIndex = getNextElementEndIndex(subPath, 0);
@@ -232,8 +285,8 @@ function SVGMorph({ svgs }) {
 
         console.log("mask paths: " + currentPathMasks);
 
-        const cleanedPath = cleanPath(path);
-        const convertedAbsolutePath = convertRelativeToAbsolute(cleanedPath);
+        //const cleanedPath = cleanPath(path);
+        const convertedAbsolutePath = cleanPath(path);
 
 
         // if path contains subpaths, split them into separate paths
