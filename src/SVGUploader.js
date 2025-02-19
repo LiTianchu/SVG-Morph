@@ -59,7 +59,7 @@ function SVGUploader({ onSvgUploaded, index }) {
             svgElement.style.transformOrigin = 'center';
 
             // set svg to white color
-            svgElement.style.fill = 'white';
+            svgElement.style.fill = 'black';
 
             setSvgContent(svgElement.outerHTML);
         }

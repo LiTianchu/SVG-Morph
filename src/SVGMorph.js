@@ -10,7 +10,7 @@ function SVGMorph({ svgs }) {
   //const interpolatorsRef = useRef([]);
 
   useEffect(() => {
-    console.log(svgs);
+    //console.log(svgs);
 
     //if (!svg1 || !svg2 ||!svg3) return;
     d3.select(svgRef.current).selectAll('*').remove();
@@ -159,13 +159,12 @@ function SVGMorph({ svgs }) {
       const numOfIntersections = countPointPolygonIntersection(selectedPoint, filteredPaths.map(path => getPathPoints(path)));
       console.log("num of intersections: " + numOfIntersections);
 
-      if (fillrule == null) {
-        return false;
-      } else if (fillrule === 'evenodd') {
+
+      if (fillrule === 'evenodd') {
         // use point in polygon algorithm to determine if the path is a hole
         // if the point is inside an odd number of polygons except itself, it is a hole
         return numOfIntersections % 2 === 1;
-      } else if (fillrule === 'nonzero') {
+      } else { // non-zero fill rule
         const windingOrder = getWindingOrder(pathPoints);
         console.log("winding order: " + windingOrder + " \n" + "path: " + path);
         // if the point is inside an odd number of polygons except itself plus the outer coutour has different winding order, it is a hole
@@ -237,7 +236,7 @@ function SVGMorph({ svgs }) {
         if (subPath.trim().slice(-1) !== 'z' && subPath.trim().slice(-1) !== 'Z') { // if this path is not closed
           subPath += "Z"; // close the path
         }
-        if (command==='M') { // skip first one and record starting point
+        if (command === 'M') { // skip first one and record starting point
           const startingXCoordEndIndex = getNextElementEndIndex(subPath, 0);
           const startingYCoordEndIndex = getNextElementEndIndex(subPath, startingXCoordEndIndex);
           prevX = parseFloat(subPath.slice(0, startingXCoordEndIndex));
@@ -279,18 +278,42 @@ function SVGMorph({ svgs }) {
       return absoluteCoordPath;
     }
 
-
+    const getColorFromPathElement = (pathElement) => {
+      let fillColor = pathElement.getAttribute('fill');
+      if (fillColor == null) {
+        // try find style attribute
+        const style = pathElement.getAttribute('style');
+        if (style != null) {
+          // get fill: value
+          const fillIndex = style.indexOf('fill:');
+          if (fillIndex !== -1) {
+            const fillValue = style.slice(fillIndex + 5, style.indexOf(';', fillIndex));
+            fillColor = fillValue;
+          }
+        }
+      
+      }
+      return fillColor;
+    }
 
     const extractPaths = (svgString) => {
       const parser = new DOMParser();
       const svgDoc = parser.parseFromString(svgString, 'image/svg+xml');
+      const parentFillColor = getColorFromPathElement(svgDoc.documentElement);
       let pathList = Array.from(svgDoc.querySelectorAll(':scope > path')); // selects only path in the direct children
       let extractedPaths = [];
 
       //console.log("pathList: " + pathList);
       pathList.forEach((pathElement, i) => {
         let currentPathMasks = [];
+
         const path = pathElement.getAttribute('d')
+        let color = getColorFromPathElement(pathElement);
+        console.log("color: " + color);
+        if (color == null) {
+          color = parentFillColor;
+        }
+       
 
         // check if path has a mask
         const maskAttr = pathElement.getAttribute('mask');
@@ -341,7 +364,7 @@ function SVGMorph({ svgs }) {
 
           subPaths.forEach(subPath => {
             if (!currentPathMasks.includes(subPath)) {
-              extractedPaths.push({ mainPath: subPath, maskPaths: currentPathMasks });
+              extractedPaths.push({ mainPath: subPath, maskPaths: currentPathMasks, fillColor: color });
             }
           });
         }
@@ -376,6 +399,7 @@ function SVGMorph({ svgs }) {
 
     svgPathLists[0].forEach((mainMaskPair, i) => {
       let firstMainPath = mainMaskPair.mainPath;
+      let firstFillColor = mainMaskPair.fillColor;
       let firstMainPathMasks = [];
       for (let k = 0; k < maxMaskPathsNum; k++) {
         if (mainMaskPair.maskPaths[k] == null) {
@@ -392,6 +416,8 @@ function SVGMorph({ svgs }) {
         const nextPairPath = svgPathLists[(j + 1) % svgPathLists.length][i];
         let fromPathList = [path.mainPath];
         let toPathList = [nextPairPath.mainPath];
+        const fromFillColor = path.fillColor;
+        const toFillColor = nextPairPath.fillColor;
 
         //const maskPaths = Math.max(path.maskPaths.length, nextPairPath.maskPaths.length);
         //console.log("mask paths: " + maxMaskPathsNum);
@@ -429,7 +455,7 @@ function SVGMorph({ svgs }) {
 
         //console.log("from path list: " + fromPathList);
         //console.log("to path list: " + toPathList);
-        let interpolators = { mainPathInterpolator: null, maskPathInterpolators: [] };
+        let interpolators = { mainPathInterpolator: null, maskPathInterpolators: [], fillColorInterpolator: null };
 
         const mainInterpolator = interpolate(fromPathList[0], toPathList[0], { maxSegmentLength: 0.1 });
         interpolators.mainPathInterpolator = mainInterpolator;
@@ -438,6 +464,8 @@ function SVGMorph({ svgs }) {
           const maskPathInterpolator = interpolate(fromPathList[k], toPathList[k], { maxSegmentLength: 0.1 });
           interpolators.maskPathInterpolators.push(maskPathInterpolator);
         }
+
+        interpolators.fillColorInterpolator = d3.interpolateRgb(fromFillColor, toFillColor);
 
         return interpolators;
 
@@ -457,13 +485,15 @@ function SVGMorph({ svgs }) {
           .attr('fill', 'black')
       });
 
+
       const pathElement = d3.select(svgRef.current).append('path')
         .attr('d', firstMainPath)
-        .attr('fill', 'black')
+        .attr('fill', firstFillColor)
         .attr('id', `path-${i}`)
         .attr('fill-rule', 'nonzero')
         .attr('mask', `url(#mask-${i})`);
 
+      console.log("initial path element: " + pathElement.node());
 
       pathsRef.current.push({ pathElement, interpolators });
 
@@ -471,7 +501,8 @@ function SVGMorph({ svgs }) {
         d3.select(pathElement.node())
           .transition()
           .duration(1000)
-          .attrTween('d', () => interpolators[interpolatorIdx].mainPathInterpolator)
+          .attrTween('d', () => interpolators[interpolatorIdx].mainPathInterpolator) // shape
+          .attrTween('fill', () => interpolators[interpolatorIdx].fillColorInterpolator) // color
           .on('end', () => animateMainPath((interpolatorIdx + 1) % interpolators.length));
       }
 
@@ -481,7 +512,6 @@ function SVGMorph({ svgs }) {
           .duration(1000)
           .attrTween('d', () => interpolators[interpolatorIdx].maskPathInterpolators[pathIdx])
           .on('end', () => animateMaskPath((interpolatorIdx + 1) % interpolators.length, pathIdx));
-
       }
 
       // foreach mask paths elements, apply the inerpolation
@@ -490,6 +520,7 @@ function SVGMorph({ svgs }) {
       });
 
       animateMainPath(0);
+
     });
 
 
