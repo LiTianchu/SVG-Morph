@@ -1,12 +1,14 @@
 import React, { useEffect, useRef, useState } from 'react';
 import * as d3 from 'd3';
 import { interpolate, interpolateAll } from 'flubber';
+import { createFFmpeg, fetchFile } from '@ffmpeg/ffmpeg';
 
-function SVGMorph({ svgs }) {
+function SVGMorph({ svgs, morphSetting }) {
   const svgRef = useRef(null);
   const canvasRef = useRef(null);
   const pathsRef = useRef([]); // Store path elements to access them from button click
   const [viewBoxSize, setViewBoxSize] = useState({ x: 0, y: 0 });
+  const [initialized, setInitialized] = useState(false);
   //const interpolatorsRef = useRef([]);
 
   useEffect(() => {
@@ -15,11 +17,12 @@ function SVGMorph({ svgs }) {
     //if (!svg1 || !svg2 ||!svg3) return;
     d3.select(svgRef.current).selectAll('*').remove();
     pathsRef.current = []; // clear previous paths
+    setInitialized(false);
     if (!svgs || svgs.length < 2) {
       return;
     }
 
-    function getPathPoints(path) {
+    const getPathPoints = (path) => {
       // get the bounding box of the path
       const pathString = path;
 
@@ -293,7 +296,9 @@ function SVGMorph({ svgs }) {
       return absoluteCoordPath;
     }
 
-    const getColorFromPathElement = (pathElement) => {
+
+
+    const getColorFromSvgElement = (pathElement) => {
       let fillColor = pathElement.getAttribute('fill');
       if (fillColor == null) {
         // try find style attribute
@@ -311,19 +316,121 @@ function SVGMorph({ svgs }) {
       return fillColor;
     }
 
+    function rectToPath(rect) {
+      let x = parseFloat(rect.getAttribute("x")) || 0;
+      let y = parseFloat(rect.getAttribute("y")) || 0;
+      let w = parseFloat(rect.getAttribute("width"));
+      let h = parseFloat(rect.getAttribute("height"));
+      let rx = parseFloat(rect.getAttribute("rx")) || 0; // Rounded corners (optional)
+      let ry = parseFloat(rect.getAttribute("ry")) || 0;
+
+      if (rx > 0 || ry > 0) {
+        return `M ${x + rx},${y} 
+            h ${w - 2 * rx} 
+            a ${rx},${ry} 0 0 1 ${rx},${ry} 
+            v ${h - 2 * ry} 
+            a ${rx},${ry} 0 0 1 -${rx},${ry} 
+            h -${w - 2 * rx} 
+            a ${rx},${ry} 0 0 1 -${rx},-${ry} 
+            v -${h - 2 * ry} 
+            a ${rx},${ry} 0 0 1 ${rx},-${ry} 
+            Z`;
+      }
+      return `M ${x},${y} h ${w} v ${h} h -${w} Z`;
+    }
+
+    function circleToPath(circle) {
+      let cx = parseFloat(circle.getAttribute("cx"));
+      let cy = parseFloat(circle.getAttribute("cy"));
+      let r = parseFloat(circle.getAttribute("r"));
+
+      return `M ${cx - r},${cy} 
+          a ${r},${r} 0 1,0 ${2 * r},0 
+          a ${r},${r} 0 1,0 -${2 * r},0 Z`;
+    }
+
+    function ellipseToPath(ellipse) {
+      let cx = parseFloat(ellipse.getAttribute("cx"));
+      let cy = parseFloat(ellipse.getAttribute("cy"));
+      let rx = parseFloat(ellipse.getAttribute("rx"));
+      let ry = parseFloat(ellipse.getAttribute("ry"));
+
+      return `M ${cx - rx},${cy} 
+          a ${rx},${ry} 0 1,0 ${2 * rx},0 
+          a ${rx},${ry} 0 1,0 -${2 * rx},0 Z`;
+    }
+
+    function lineToPath(line) {
+      let x1 = parseFloat(line.getAttribute("x1"));
+      let y1 = parseFloat(line.getAttribute("y1"));
+      let x2 = parseFloat(line.getAttribute("x2"));
+      let y2 = parseFloat(line.getAttribute("y2"));
+
+      return `M ${x1},${y1} L ${x2},${y2}`;
+    }
+
+    function polylineToPath(polyline) {
+      let points = polyline.getAttribute("points").trim();
+      let commands = points.split(" ").map((point, index) => {
+        let [x, y] = point.split(",").map(Number);
+        return (index === 0 ? `M ${x},${y}` : `L ${x},${y}`);
+      });
+
+      return commands.join(" ");
+    }
+
+    function polygonToPath(polygon) {
+      let pathData = polylineToPath(polygon); // Uses polyline logic
+      return pathData + " Z"; // Close the shape
+    }
+
+    const rawPathStringToPathElement = (pathString) => {
+      const parser = new DOMParser();
+      const svgDoc = parser.parseFromString(`<svg xmlns="http://www.w3.org/2000/svg"><path d="${pathString}"/></svg>`, 'image/svg+xml');
+      return svgDoc.documentElement.getElementsByTagName('path')[0];
+    }
+
     const extractPaths = (svgString) => {
       const parser = new DOMParser();
       const svgDoc = parser.parseFromString(svgString, 'image/svg+xml');
-      const parentFillColor = getColorFromPathElement(svgDoc.documentElement);
-      let pathList = Array.from(svgDoc.querySelectorAll(':scope > path')); // selects only path in the direct children
+      const parentFillColor = getColorFromSvgElement(svgDoc.documentElement);
+      //let pathList = Array.from(svgDoc.querySelectorAll(':scope > path')); // selects only path in the direct children
+      let pathList = Array.from(svgDoc.querySelectorAll(':scope > path, :scope > rect, :scope > circle, :scope > ellipse, :scope > line, :scope > polyline, :scope > polygon')); // selects only path in the direct children
       let extractedPaths = [];
 
       //console.log("pathList: " + pathList);
+      //convert non path elements to path elements
       pathList.forEach((pathElement, i) => {
         let currentPathMasks = [];
 
+        if (pathElement.tagName !== 'path') {
+          let convertedPathString = null;
+          switch (pathElement.tagName) {
+            case 'rect':
+              convertedPathString = rectToPath(pathElement);
+              break;
+            case 'circle':
+              convertedPathString = circleToPath(pathElement);
+              break;
+            case 'ellipse':
+              convertedPathString = ellipseToPath(pathElement);
+              break;
+            case 'line':
+              convertedPathString = lineToPath(pathElement);
+              break;
+            case 'polyline':
+              convertedPathString = polylineToPath(pathElement);
+              break;
+            case 'polygon':
+              convertedPathString = polygonToPath(pathElement);
+              break;
+            default: console.log("unsupported path element tag: " + pathElement.tagName);
+          }
+          pathElement = rawPathStringToPathElement(convertedPathString);
+        }
+
         const path = pathElement.getAttribute('d')
-        let color = getColorFromPathElement(pathElement);
+        let color = getColorFromSvgElement(pathElement);
         console.log("color: " + color);
         if (color == null) {
           color = parentFillColor;
@@ -426,7 +533,7 @@ function SVGMorph({ svgs }) {
       }
 
 
-      const interpolators = svgPathLists.map((pathList, j) => {
+      const interpolatorsToEnd = svgPathLists.map((pathList, j) => {
         const path = pathList[i];
         const nextPairPath = svgPathLists[(j + 1) % svgPathLists.length][i];
         let fromPathList = [path.mainPath];
@@ -510,47 +617,122 @@ function SVGMorph({ svgs }) {
 
       console.log("initial path element: " + pathElement.node());
 
-      pathsRef.current.push({ pathElement, interpolators });
-
-      function animateMainPath(interpolatorIdx) {
-        d3.select(pathElement.node())
-          .transition()
-          .duration(1000)
-          .attrTween('d', () => interpolators[interpolatorIdx].mainPathInterpolator) // shape
-          .attrTween('fill', () => interpolators[interpolatorIdx].fillColorInterpolator) // color
-          .on('end', () => animateMainPath((interpolatorIdx + 1) % interpolators.length));
-      }
-
-      function animateMaskPath(interpolatorIdx, pathIdx) {
-        d3.select(maskTagElement.selectAll('path').nodes()[pathIdx])
-          .transition()
-          .duration(1000)
-          .attrTween('d', () => interpolators[interpolatorIdx].maskPathInterpolators[pathIdx])
-          .on('end', () => animateMaskPath((interpolatorIdx + 1) % interpolators.length, pathIdx));
-      }
-
-      // foreach mask paths elements, apply the inerpolation
-      firstMainPathMasks.forEach((maskPath, k) => {
-        animateMaskPath(0, k);
-      });
-
-      animateMainPath(0);
+      pathsRef.current.push({ pathElement, maskTagElement, interpolatorsToEnd }); // push the starting path element and the series of interpolators to the end
 
     });
 
-
+    setInitialized(true);
+    console.log("set initialied to true to trigger animation");
     return () => {
       d3.select(svgRef.current).selectAll('*').interrupt();
     };
   }, [svgs]);
+
+
+  const getD3Easing = (easingName) => {
+    switch (easingName) {
+      // linear
+      case 'linear': return d3.easeLinear;
+
+      // quad
+      case 'quad-in': return d3.easeQuadIn;
+      case 'quad-out': return d3.easeQuadOut;
+      case 'quad-in-out': return d3.easeQuadInOut;
+
+      // cubic
+      case 'cubic-in': return d3.easeCubicIn;
+      case 'cubic-out': return d3.easeCubicOut;
+      case 'cubic-in-out': return d3.easeCubicInOut;
+
+      // sinusoidal
+      case 'sin-in': return d3.easeSinIn;
+      case 'sin-out': return d3.easeSinOut;
+      case 'sin-in-out': return d3.easeSinInOut;
+
+      // exponential
+      case 'exp-in': return d3.easeExpIn;
+      case 'exp-out': return d3.easeExpOut;
+      case 'exp-in-out': return d3.easeExpInOut;
+
+      // circular
+      case 'circle-in': return d3.easeCircleIn;
+      case 'circle-out': return d3.easeCircleOut;
+      case 'circle-in-out': return d3.easeCircleInOut;
+
+      // bounce
+      case 'bounce-in': return d3.easeBounceIn;
+      case 'bounce-out': return d3.easeBounceOut;
+      case 'bounce-in-out': return d3.easeBounceInOut;
+
+      // elastic
+      case 'elastic-in': return d3.easeElasticIn;
+      case 'elastic-out': return d3.easeElasticOut;
+      case 'elastic-in-out': return d3.easeElasticInOut;
+
+      // back (overshoots a bit)
+      case 'back-in': return d3.easeBackIn;
+      case 'back-out': return d3.easeBackOut;
+      case 'back-in-out': return d3.easeBackInOut;
+
+      // default to linear easing
+      default: return d3.easeLinear;
+    }
+  };
+
+
+
+  // animation use effect
+  useEffect(() => {
+    console.log("trying to trigger animation, initialized " + initialized);
+    if (!initialized) { return; }
+    console.log("triggering animation");
+    const svg = d3.select(svgRef.current);
+    svg.selectAll('*').interrupt();
+
+    const morphDuration = morphSetting.duration;
+    const easing = morphSetting.easing;
+    const d3Easing = getD3Easing(easing);
+
+    function animateMainPath(pathElement, interpolatorsToEnd, interpolatorIdx) {
+      d3.select(pathElement.node())
+        .transition()
+        .ease(d3Easing)
+        .duration(morphDuration)
+        .attrTween('d', () => interpolatorsToEnd[interpolatorIdx].mainPathInterpolator) // shape
+        .attrTween('fill', () => interpolatorsToEnd[interpolatorIdx].fillColorInterpolator) // color
+        .on('end', () => animateMainPath(pathElement, interpolatorsToEnd, (interpolatorIdx + 1) % interpolatorsToEnd.length));
+    }
+
+    function animateMaskPath(maskTagElement, interpolatorsToEnd, interpolatorIdx, pathIdx) {
+      d3.select(maskTagElement.selectAll('path').nodes()[pathIdx])
+        .transition()
+        .ease(d3Easing)
+        .duration(morphDuration)
+        .attrTween('d', () => interpolatorsToEnd[interpolatorIdx].maskPathInterpolators[pathIdx])
+        .on('end', () => animateMaskPath(maskTagElement, interpolatorsToEnd, (interpolatorIdx + 1) % interpolatorsToEnd.length, pathIdx));
+    }
+
+    pathsRef.current.forEach((pathAndInterpolators, i) => {
+      console.log(pathAndInterpolators);
+      const pathElement = pathAndInterpolators.pathElement;
+      const maskTagElement = pathAndInterpolators.maskTagElement;
+      const interpolatorsToEnd = pathAndInterpolators.interpolatorsToEnd;
+      animateMainPath(pathElement, interpolatorsToEnd, 0);
+
+      maskTagElement.selectAll('path').nodes().forEach((_, k) => {
+        animateMaskPath(maskTagElement, interpolatorsToEnd, 0, k);
+      })
+    });
+
+  }, [initialized, morphSetting, svgs]);
 
   // Button click handler to start animation on all paths
   const handleFrameExport = () => {
     const context = canvasRef.current.getContext('2d');
     const svg = d3.select(svgRef.current);
     console.log(pathsRef.current);
-    const numOfMorphs = pathsRef.current[0].interpolators.length;
-    const numOfMaskPathsPerNormalPath = pathsRef.current[0].interpolators[0].maskPathInterpolators.length;
+    const numOfMorphs = pathsRef.current[0].interpolatorsToEnd.length;
+    const numOfMaskPathsPerNormalPath = pathsRef.current[0].interpolatorsToEnd[0].maskPathInterpolators.length;
     console.log("num of morphs: " + numOfMorphs);
 
     const downloadQueue = [];
@@ -563,7 +745,7 @@ function SVGMorph({ svgs }) {
           const path = d3.select(this);
           //console.log(i);
           //console.log(pathsRef.current[i]);
-          const interpolators = pathsRef.current[i].interpolators;
+          const interpolators = pathsRef.current[i].interpolatorsToEnd;
           // print the interpolators object
           console.log("m: " + m);
           console.log(interpolators);
@@ -574,9 +756,9 @@ function SVGMorph({ svgs }) {
         // interpolate mask paths
         svg.selectAll('mask path').each(function (_, i) {
           const maskPath = d3.select(this);
-          const pathIndex = Math.floor(i/numOfMaskPathsPerNormalPath);
+          const pathIndex = Math.floor(i / numOfMaskPathsPerNormalPath);
           const maskPathIndex = i % numOfMaskPathsPerNormalPath;
-          const interpolators = pathsRef.current[pathIndex].interpolators;
+          const interpolators = pathsRef.current[pathIndex].interpolatorsToEnd;
           maskPath.attr('d', interpolators[m].maskPathInterpolators[maskPathIndex](t));
         });
 
@@ -584,23 +766,23 @@ function SVGMorph({ svgs }) {
         const img = new Image();
         img.src = `data:image/svg+xml;base64,${btoa(svgData)}`;
 
-        downloadQueue.push({ img,  m, frameIndex });
+        downloadQueue.push({ img, m, frameIndex });
       });
     }
 
     const processQueue = () => {
       if (downloadQueue.length === 0) { return; }
 
-      const {img, m, frameIndex} = downloadQueue.shift(); // dequeue by remove first element from the array
-          console.log("image downloaded: " + `image-morph${m}-frame${frameIndex}.png`);
-          context.clearRect(0, 0, canvasRef.current.width, canvasRef.current.height);
-          context.drawImage(img, 0, 0);
-          const pngDataUrl = canvasRef.current.toDataURL('image/png');
-          const link = document.createElement('a');
-          link.href = pngDataUrl;
-          link.download = `image-morph${m}-frame${frameIndex}.png`;
-          link.click();
-          setTimeout(processQueue, 100); // Process the next item in the queue after a short delay
+      const { img, m, frameIndex } = downloadQueue.shift(); // dequeue by remove first element from the array
+      console.log("image downloaded: " + `image-morph${m}-frame${frameIndex}.png`);
+      context.clearRect(0, 0, canvasRef.current.width, canvasRef.current.height);
+      context.drawImage(img, 0, 0);
+      const pngDataUrl = canvasRef.current.toDataURL('image/png');
+      const link = document.createElement('a');
+      link.href = pngDataUrl;
+      link.download = `image-morph${m}-frame${frameIndex}.png`;
+      link.click();
+      setTimeout(processQueue, 100); // Process the next item in the queue after a short delay
     }
 
     processQueue();
