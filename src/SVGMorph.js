@@ -124,8 +124,8 @@ function SVGMorph({ svgs, morphSetting }) {
     }
 
     const countPointPolygonIntersection = (point, polygonPaths) => {
-      //console.log("point: " + point);
-      //console.log("polygon paths: " + polygonPaths);
+      console.log("point: " + point);
+      console.log("polygon paths: " + polygonPaths);
       point = pointArrToVector(point);
       const ray = point.y; // horizontal ray y = point.y, assuming ray is pointing right
       console.log("ray: " + ray);
@@ -177,10 +177,22 @@ function SVGMorph({ svgs, morphSetting }) {
       const outerContourPoints = getPathPoints(outerContour);
       const outerContourWindingOrder = getWindingOrder(outerContourPoints);
 
-      //console.log("Path points: " + pathPoints);
+      console.log("Path points: " + pathPoints);
       const filteredPaths = pathList.filter(p => p != path);
-      const selectedPoint = pathPoints[0];
-      //console.log("selected point: " + selectedPoint);
+      let selectedPoint = pathPoints[0];
+      if (selectedPoint == null || selectedPoint == undefined) {
+        console.log("selected point is null, choosing the first point of the path");
+        const commandIndex = getNextElementEndIndex(path, 0); // M
+        const xCoordEndIndex = getNextElementEndIndex(path, commandIndex);
+        const yCoordEndIndex = getNextElementEndIndex(path, xCoordEndIndex);
+
+        selectedPoint = [parseFloat(path.slice(commandIndex, xCoordEndIndex)),
+        parseFloat(path.slice(xCoordEndIndex, yCoordEndIndex))];
+        return;
+      }
+
+      
+      console.log("selected point: " + selectedPoint);
       //console.log("filtered paths: " + filteredPaths);
       const numOfIntersections = countPointPolygonIntersection(selectedPoint, filteredPaths.map(path => getPathPoints(path)));
       console.log("num of intersections: " + numOfIntersections);
@@ -467,7 +479,19 @@ function SVGMorph({ svgs, morphSetting }) {
           let outerContour = null;
 
           subPaths.forEach(subPath => {
-            const selectedPoint = getPathPoints(subPath)[0];
+            console.log("subpath debug: " + subPath);
+            let selectedPoint = getPathPoints(subPath)[0];
+            if (selectedPoint == null || selectedPoint == undefined) {
+              console.log("selected point is null, choosing the first point of the path");
+              const commandIndex = getNextElementEndIndex(subPath, 0); // M
+              const xCoordEndIndex = getNextElementEndIndex(subPath, commandIndex);
+              const yCoordEndIndex = getNextElementEndIndex(subPath, xCoordEndIndex);
+
+              selectedPoint = [parseFloat(subPath.slice(commandIndex, xCoordEndIndex)),
+              parseFloat(subPath.slice(xCoordEndIndex, yCoordEndIndex))];
+              return;
+            }
+            console.log(selectedPoint);
             const filteredPaths = subPaths.filter(p => p != subPath);
             const numOfIntersections = countPointPolygonIntersection(selectedPoint, filteredPaths.map(path => getPathPoints(path)));
             if (numOfIntersections % 2 === 0) { // if the point is outside an even number of polygon line segments, it is the outer contour
