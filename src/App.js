@@ -9,7 +9,9 @@ function App() {
   const [svgs, setSvgs] = useState([]);
   const [svgMorphingSettings, setSvgMorphingSettings] = useState({
     duration: 1000,
+    quality: 10,
     easing: 'linear',
+    oneToMany: 'duplicate'
   });
 
   const [loadingInfoList, setLoadingInfoList] = useState([{
