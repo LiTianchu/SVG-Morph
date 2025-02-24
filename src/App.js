@@ -3,6 +3,7 @@ import './App.css';
 import SVGMorph from './SVGMorph';
 import SVGList from './SVGList';
 import MorphSettingPanel from './MorphSettingPanel';
+import LoadingInfoView from './LoadingInfoView';
 
 function App() {
   const [svgs, setSvgs] = useState([]);
@@ -11,11 +12,17 @@ function App() {
     easing: 'linear',
   });
 
-  const handleSvgUpload = (index, svg) => {
-    setSvgs(prevSvgs => {
-      const newSvgs = [...prevSvgs];
-      newSvgs[index] = svg;
-      return newSvgs;
+  const [loadingInfoList, setLoadingInfoList] = useState([{
+    text: 'Please upload at least 2 SVGs to start morphing.'
+  }])
+
+  const [isMorphing, setIsMorphing] = useState(false);
+
+  const handleLoadingStateChange = (isMorphing, loadingInfo) => {
+    setIsMorphing(isMorphing);
+    setLoadingInfoList(prevLoadingInfo => {
+      const newLoadingInfo = [...prevLoadingInfo];
+      return newLoadingInfo;
     });
   }
 
@@ -23,7 +30,10 @@ function App() {
     <div className="App">
       <header className="App-header">
         <SVGList onSvgsChange={setSvgs} />
-        <SVGMorph svgs={svgs} morphSetting={svgMorphingSettings} />
+        <div id="morphing-preview" style={{display:'flex',justifyContent:'center',alignItems:'center',position:'relative', width:"300px", height:"300px"}}>
+          <SVGMorph svgs={svgs} morphSetting={svgMorphingSettings} onLoadingStateChange={handleLoadingStateChange} />
+          <LoadingInfoView loadingInfoList={loadingInfoList} isMorphing={isMorphing}/>
+        </div>
         <MorphSettingPanel onSettingChange={setSvgMorphingSettings} />
       </header>
     </div>

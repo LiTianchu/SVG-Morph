@@ -3,12 +3,13 @@ import * as d3 from 'd3';
 import { interpolate, interpolateAll } from 'flubber';
 import { createFFmpeg, fetchFile } from '@ffmpeg/ffmpeg';
 
-function SVGMorph({ svgs, morphSetting }) {
+function SVGMorph({ svgs, morphSetting, onLoadingStateChange }) {
   const svgRef = useRef(null);
   const canvasRef = useRef(null);
   const pathsRef = useRef([]); // Store path elements to access them from button click
   const [viewBoxSize, setViewBoxSize] = useState({ x: 0, y: 0 });
   const [initialized, setInitialized] = useState(false);
+  const [isMorphing, setIsMorphing] = useState(false);
   //const interpolatorsRef = useRef([]);
 
   useEffect(() => {
@@ -19,8 +20,13 @@ function SVGMorph({ svgs, morphSetting }) {
     pathsRef.current = []; // clear previous paths
     setInitialized(false);
     if (!svgs || svgs.length < 2) {
+      console.log("Num of SVGs less than 2, abort morphing");
+      setIsMorphing(false);
+      onLoadingStateChange(false, { text: "Please upload at least 2 SVGs to start morphing." });
       return;
     }
+
+
 
     const getPathPoints = (path) => {
       // get the bounding box of the path
@@ -168,10 +174,6 @@ function SVGMorph({ svgs, morphSetting }) {
       return intersectionCount;
     }
 
-
-
-
-
     const isPathHole = (path, pathList, outerContour, fillrule) => {
       const pathPoints = getPathPoints(path);
       const outerContourPoints = getPathPoints(outerContour);
@@ -191,7 +193,7 @@ function SVGMorph({ svgs, morphSetting }) {
         return;
       }
 
-      
+
       console.log("selected point: " + selectedPoint);
       //console.log("filtered paths: " + filteredPaths);
       const numOfIntersections = countPointPolygonIntersection(selectedPoint, filteredPaths.map(path => getPathPoints(path)));
@@ -328,12 +330,12 @@ function SVGMorph({ svgs, morphSetting }) {
       return fillColor;
     }
 
-    function rectToPath(rect) {
+    const rectToPath = (rect) => {
       let x = parseFloat(rect.getAttribute("x")) || 0;
       let y = parseFloat(rect.getAttribute("y")) || 0;
       let w = parseFloat(rect.getAttribute("width"));
       let h = parseFloat(rect.getAttribute("height"));
-      let rx = parseFloat(rect.getAttribute("rx")) || 0; // Rounded corners (optional)
+      let rx = parseFloat(rect.getAttribute("rx")) || 0; // rounded corners (optional)
       let ry = parseFloat(rect.getAttribute("ry")) || 0;
 
       if (rx > 0 || ry > 0) {
@@ -351,7 +353,7 @@ function SVGMorph({ svgs, morphSetting }) {
       return `M ${x},${y} h ${w} v ${h} h -${w} Z`;
     }
 
-    function circleToPath(circle) {
+    const circleToPath = (circle) => {
       let cx = parseFloat(circle.getAttribute("cx"));
       let cy = parseFloat(circle.getAttribute("cy"));
       let r = parseFloat(circle.getAttribute("r"));
@@ -361,7 +363,7 @@ function SVGMorph({ svgs, morphSetting }) {
           a ${r},${r} 0 1,0 -${2 * r},0 Z`;
     }
 
-    function ellipseToPath(ellipse) {
+    const ellipseToPath = (ellipse) => {
       let cx = parseFloat(ellipse.getAttribute("cx"));
       let cy = parseFloat(ellipse.getAttribute("cy"));
       let rx = parseFloat(ellipse.getAttribute("rx"));
@@ -372,7 +374,7 @@ function SVGMorph({ svgs, morphSetting }) {
           a ${rx},${ry} 0 1,0 -${2 * rx},0 Z`;
     }
 
-    function lineToPath(line) {
+    const lineToPath = (line) => {
       let x1 = parseFloat(line.getAttribute("x1"));
       let y1 = parseFloat(line.getAttribute("y1"));
       let x2 = parseFloat(line.getAttribute("x2"));
@@ -381,7 +383,7 @@ function SVGMorph({ svgs, morphSetting }) {
       return `M ${x1},${y1} L ${x2},${y2}`;
     }
 
-    function polylineToPath(polyline) {
+    const polylineToPath = (polyline) => {
       let points = polyline.getAttribute("points").trim();
       let commands = points.split(" ").map((point, index) => {
         let [x, y] = point.split(",").map(Number);
@@ -391,7 +393,7 @@ function SVGMorph({ svgs, morphSetting }) {
       return commands.join(" ");
     }
 
-    function polygonToPath(polygon) {
+    const polygonToPath = (polygon) => {
       let pathData = polylineToPath(polygon); // Uses polyline logic
       return pathData + " Z"; // Close the shape
     }
@@ -708,7 +710,15 @@ function SVGMorph({ svgs, morphSetting }) {
   // animation use effect
   useEffect(() => {
     console.log("trying to trigger animation, initialized " + initialized);
-    if (!initialized) { return; }
+    
+    setIsMorphing(initialized);
+    onLoadingStateChange(initialized, { text: "morphing animation started" });
+
+    if (!initialized) {
+      return;
+    }
+
+
     console.log("triggering animation");
     const svg = d3.select(svgRef.current);
     svg.selectAll('*').interrupt();
@@ -761,9 +771,10 @@ function SVGMorph({ svgs, morphSetting }) {
 
     const downloadQueue = [];
     for (let m = 0; m < numOfMorphs; m++) {
-      // Create frames at intervals from 0 to 1
-      const numFrames = 20;
-      const frames = Array.from({ length: numFrames }, (_, i) => i / (numFrames - 1)); // frames = [0, 0.25, 0.5, 0.75, 1];
+
+      // create frames at intervals from 0 to 1
+      const numFrames = 24; // 24 frames per second
+      const frames = Array.from({ length: numFrames }, (_, i) => i / (numFrames - 1)); // e.g. numFrames = 5, frames = [0, 0.25, 0.5, 0.75, 1];
       frames.forEach((t, frameIndex) => {
         svg.selectAll(':scope > path').each(function (_, i) {
           const path = d3.select(this);
@@ -813,10 +824,12 @@ function SVGMorph({ svgs, morphSetting }) {
   }
 
   return (
-    <div style={{ display: 'flex', justifyContent: 'space-around', alignItems: 'center' }}>
-      <svg ref={svgRef} width="100%" height="100%" viewBox={"0 0 " + viewBoxSize.x + " " + viewBoxSize.y}></svg>
-      <button onClick={handleFrameExport}>Export Frames</button>
-      <canvas ref={canvasRef} width="500" height="500" style={{ display: 'none' }}></canvas>
+    <div style={{ position: "absolute", width: "100%", height: "100%" }}>
+      <div style={{ display: isMorphing ? 'flex' : 'none', justifyContent: 'space-around', alignItems: 'center' }}>
+        <svg ref={svgRef} width="100%" height="100%" viewBox={"0 0 " + viewBoxSize.x + " " + viewBoxSize.y}></svg>
+        <button onClick={handleFrameExport}>Export Frames</button>
+        <canvas ref={canvasRef} width="500" height="500" style={{ display: 'none' }}></canvas>
+      </div>
     </div>
   );
 }
