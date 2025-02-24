@@ -21,8 +21,8 @@ function App() {
   const handleLoadingStateChange = (isMorphing, loadingInfo) => {
     setIsMorphing(isMorphing);
     setLoadingInfoList(prevLoadingInfo => {
-      const newLoadingInfo = [...prevLoadingInfo];
-      return newLoadingInfo;
+      const newLoadingInfo = [...prevLoadingInfo, loadingInfo];
+      return newLoadingInfo.slice(-10); //only keep top 10 latest message
     });
   }
 
