@@ -18,15 +18,19 @@ function SVGMorph({ svgs, morphSetting, onLoadingStateChange }) {
     pathsRef.current = []; // clear previous paths
     setInitialized(false);
     setIsMorphing(false);
-    onLoadingStateChange(false, { text: "Please upload at least 2 SVGs to start morphing." });
+    onLoadingStateChange(true, false, { text: "Please upload at least 2 SVGs to start morphing." });
+
+    let timeElapsed = new Date().getTime();
 
     if (!svgs || svgs.length < 2) {
-      console.log("Num of SVGs less than 2, abort morphing");
+      //console.log("Num of SVGs less than 2, abort morphing");
       return;
     }
 
     const computeViewBoxAsync = async () => {
-      onLoadingStateChange(false, { text: "Computing viewbox size..." });
+      onLoadingStateChange(false, false, { text: "Computing viewbox size..." });
+      console.log("computing viewbox size timestamp: " + (new Date().getTime() - timeElapsed));
+
       // compute view box size
       let sizeX = 0;
       let sizeY = 0;
@@ -39,7 +43,7 @@ function SVGMorph({ svgs, morphSetting, onLoadingStateChange }) {
         if (viewBox != null) {
 
           const svgViewBoxSize = viewBox.split(' ').slice(2);
-          console.log("viewbox size: " + svgViewBoxSize);
+          //console.log("viewbox size: " + svgViewBoxSize);
           if (parseFloat(svgViewBoxSize[0]) > sizeX) {
             sizeX = svgViewBoxSize[0];
           }
@@ -62,7 +66,8 @@ function SVGMorph({ svgs, morphSetting, onLoadingStateChange }) {
 
 
     const extractPathAysnc = async () => {
-      onLoadingStateChange(false, { text: "Extracting paths..." });
+      onLoadingStateChange(false,false, { text: "Extracting paths..." });
+      console.log("extracting paths timestamp: " + (new Date().getTime() - timeElapsed));
       // extract path to get the list of paths of each svg
       const svgPathLists = svgs.map(pathUtils.extractPaths);
       return svgPathLists
@@ -70,6 +75,8 @@ function SVGMorph({ svgs, morphSetting, onLoadingStateChange }) {
 
     const standardizePathNumAsync = async (svgPathLists) => {
       // make all svgs have the same number of paths
+      onLoadingStateChange(false,false, { text: "Standardizing number of paths..." });
+      console.log("standardizing number of paths timestamp: " + (new Date().getTime() - timeElapsed));
       const maxPaths = Math.max(...svgPathLists.map(pathList => pathList.length));
 
       //console.log("max paths: " + maxPaths);
@@ -88,7 +95,9 @@ function SVGMorph({ svgs, morphSetting, onLoadingStateChange }) {
     }
 
     const getInterpolatorTillEndAsync = async (svgPathLists, pathIndex) => {
-      onLoadingStateChange(false, { text: "Generating interpolators for path at index " + pathIndex });
+      onLoadingStateChange(false,false, { text: "Generating interpolators for path at index " + pathIndex });
+      console.log("generating interpolators for path at index " + pathIndex + " timestamp: " + (new Date().getTime() - timeElapsed));
+
       const interpolatorsToEnd = svgPathLists.map((pathList, j) => {
         const path = pathList[pathIndex];
         const nextPairPath = svgPathLists[(j + 1) % svgPathLists.length][pathIndex];
@@ -135,10 +144,12 @@ function SVGMorph({ svgs, morphSetting, onLoadingStateChange }) {
         //console.log("from path list: " + fromPathList);
         //console.log("to path list: " + toPathList);
         let interpolators = { mainPathInterpolator: null, maskPathInterpolators: [], fillColorInterpolator: null };
-
+        
+        //console.log("generating interpolators for main path at index " + pathIndex + " timestamp: " + (new Date().getTime() - timeElapsed));
         const mainInterpolator = interpolate(fromPathList[0], toPathList[0], { maxSegmentLength: 0.1 });
         interpolators.mainPathInterpolator = mainInterpolator;
 
+        //console.log("generating interpolators for mask path at index " + pathIndex + " timestamp: " + (new Date().getTime() - timeElapsed));
         for (let k = 1; k < fromPathList.length; k++) {
           const maskPathInterpolator = interpolate(fromPathList[k], toPathList[k], { maxSegmentLength: 0.1 });
           interpolators.maskPathInterpolators.push(maskPathInterpolator);
@@ -152,7 +163,9 @@ function SVGMorph({ svgs, morphSetting, onLoadingStateChange }) {
     }
 
     const setUpInterpolationAsync = async () => {
-      onLoadingStateChange(false, { text: "Starting to set up interpolation..." });
+      onLoadingStateChange(false,false, { text: "Starting to set up interpolation..." });
+      console.log("setting up interpolation timestamp: " + (new Date().getTime() - timeElapsed));
+      //await new Promise((resolve) => setTimeout(resolve, 2000));
 
       await computeViewBoxAsync();
       let svgPathLists = await extractPathAysnc(svgs);
@@ -197,16 +210,17 @@ function SVGMorph({ svgs, morphSetting, onLoadingStateChange }) {
           .attr('fill-rule', 'nonzero')
           .attr('mask', `url(#mask-${i})`); // link to masks
 
-        console.log("initial path element: " + pathElement.node());
+        //console.log("initial path element: " + pathElement.node());
 
         // push the starting path element and the series of interpolators to the end
         pathsRef.current.push({ pathElement, maskTagElement, interpolatorsToEnd });
       });
       
-      onLoadingStateChange(false, { text: "Finished setting up interpolation, triggering animation..." });
+      onLoadingStateChange(false,false, { text: "Finished setting up interpolation, triggering animation..." });
+      console.log("finished setting up interpolation timestamp: " + (new Date().getTime() - timeElapsed));
       await new Promise((resolve) => setTimeout(resolve, 2000));
       setInitialized(true);
-      console.log("set initialied to true to trigger animation");
+      //console.log("set initialied to true to trigger animation");
     }
 
     setUpInterpolationAsync();
@@ -217,23 +231,21 @@ function SVGMorph({ svgs, morphSetting, onLoadingStateChange }) {
   }, [svgs]);
 
 
- 
-
-
-
   // animation use effect
   useEffect(() => {
-    console.log("trying to trigger animation, initialized " + initialized);
+    //console.log("trying to trigger animation, initialized " + initialized);
 
-    setIsMorphing(initialized);
-    onLoadingStateChange(initialized, { text: "morphing animation started" });
-
+    
     if (!initialized) {
+      setIsMorphing(false);
+      onLoadingStateChange(false,false, { text: "" });
       return;
+    }else{
+      setIsMorphing(true);
+      onLoadingStateChange(false,true, { text: "" });
     }
 
-
-    console.log("triggering animation");
+    //console.log("triggering animation");
     const svg = d3.select(svgRef.current);
     svg.selectAll('*').interrupt();
 
@@ -261,7 +273,7 @@ function SVGMorph({ svgs, morphSetting, onLoadingStateChange }) {
     }
 
     pathsRef.current.forEach((pathAndInterpolators, i) => {
-      console.log(pathAndInterpolators);
+      //console.log(pathAndInterpolators);
       const pathElement = pathAndInterpolators.pathElement;
       const maskTagElement = pathAndInterpolators.maskTagElement;
       const interpolatorsToEnd = pathAndInterpolators.interpolatorsToEnd;

@@ -17,11 +17,11 @@ const pointArrToVector = (point) => {
 }
 
 const countPointPolygonIntersection = (point, polygonPaths) => {
-    console.log("point: " + point);
-    console.log("polygon paths: " + polygonPaths);
+    //console.log("point: " + point);
+    //console.log("polygon paths: " + polygonPaths);
     point = pointArrToVector(point);
     const ray = point.y; // horizontal ray y = point.y, assuming ray is pointing right
-    console.log("ray: " + ray);
+    //console.log("ray: " + ray);
     let intersectionCount = 0;
     polygonPaths.forEach(polygon => {
         for (let i = 0; i < polygon.length; i++) {
@@ -37,7 +37,7 @@ const countPointPolygonIntersection = (point, polygonPaths) => {
                 //console.log("ray is to the right of the line segment, does not count");
                 continue;
             }
-            console.log(`found segment within boundary p1: (${p1.x},${p1.y}) p2: (${p2.x},${p2.y})`);
+            //console.log(`found segment within boundary p1: (${p1.x},${p1.y}) p2: (${p2.x},${p2.y})`);
 
             const xDiff = p2.x - p1.x;
             if (xDiff === 0) { // vertical line

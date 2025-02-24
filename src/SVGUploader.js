@@ -66,7 +66,7 @@ function SVGUploader({ onSvgUploaded, index }) {
     }, [svgContent]);
 
     return (
-        <div class="svg-uploader" id={"svg-uploader" + index}>
+        <div className ="svg-uploader" id={"svg-uploader" + index}>
             <button
                 style={{
                     width: '300px',

@@ -27,6 +27,7 @@ const computePathCenter = (path) => {
 };
 
 const getPathPoints = (path) => {
+    //let timeElapsed = new Date().getTime();
     // get the bounding box of the path
     const pathString = path;
 
@@ -47,42 +48,44 @@ const getPathPoints = (path) => {
     }
 
     document.body.removeChild(tempSvg);
+    //console.log("get path point took " + (new Date().getTime() - timeElapsed) + "ms");
     return points;
 }
 
-const isPathHole = (path, pathList, outerContour, fillrule) => {
-    const pathPoints = getPathPoints(path);
-    const outerContourPoints = getPathPoints(outerContour);
+const isPathHole = (selectedPoint, pathPoints, otherPathPoints, outerContourPoints, fillrule) => {
+    //let timeElapsed = new Date().getTime();
+    //const pathPoints = getPathPoints(path);
+    //const outerContourPoints = getPathPoints(outerContour);
     const outerContourWindingOrder = polygonUtils.getWindingOrder(outerContourPoints);
 
-    console.log("Path points: " + pathPoints);
-    const filteredPaths = pathList.filter(p => p != path);
-    let selectedPoint = pathPoints[0];
-    if (selectedPoint == null || selectedPoint == undefined) {
-        console.log("selected point is null, choosing the first point of the path");
-        const commandIndex = getNextElementEndIndex(path, 0); // M
-        const xCoordEndIndex = getNextElementEndIndex(path, commandIndex);
-        const yCoordEndIndex = getNextElementEndIndex(path, xCoordEndIndex);
+    //console.log("Path points: " + pathPoints);
+    //const filteredPaths = pathList.filter(p => p != path);
+    //let selectedPoint = pathPoints[0];
+    // if (selectedPoint == null || selectedPoint == undefined) {
+    //     //console.log("selected point is null, choosing the first point of the path");
+    //     const commandIndex = getNextElementEndIndex(path, 0); // M
+    //     const xCoordEndIndex = getNextElementEndIndex(path, commandIndex);
+    //     const yCoordEndIndex = getNextElementEndIndex(path, xCoordEndIndex);
 
-        selectedPoint = [parseFloat(path.slice(commandIndex, xCoordEndIndex)),
-        parseFloat(path.slice(xCoordEndIndex, yCoordEndIndex))];
-        return;
-    }
+    //     selectedPoint = [parseFloat(path.slice(commandIndex, xCoordEndIndex)),
+    //     parseFloat(path.slice(xCoordEndIndex, yCoordEndIndex))];
+    //     return;
+    // }
 
 
-    console.log("selected point: " + selectedPoint);
+    //console.log("selected point: " + selectedPoint);
     //console.log("filtered paths: " + filteredPaths);
-    const numOfIntersections = polygonUtils.countPointPolygonIntersection(selectedPoint, filteredPaths.map(path => getPathPoints(path)));
-    console.log("num of intersections: " + numOfIntersections);
+    const numOfIntersections = polygonUtils.countPointPolygonIntersection(selectedPoint, otherPathPoints);
+    //console.log("num of intersections: " + numOfIntersections);
 
-
+    //console.log("isPathHole took " + (new Date().getTime() - timeElapsed) + "ms");
     if (fillrule === 'evenodd') {
         // use point in polygon algorithm to determine if the path is a hole
         // if the point is inside an odd number of polygons except itself, it is a hole
         return numOfIntersections % 2 === 1;
     } else { // non-zero fill rule
         const windingOrder = polygonUtils.getWindingOrder(pathPoints);
-        console.log("winding order: " + windingOrder + " \n" + "path: " + path);
+        //console.log("winding order: " + windingOrder + " \n" + "path: " + path);
         // if the point is inside an odd number of polygons except itself plus the outer coutour has different winding order, it is a hole
         return windingOrder !== outerContourWindingOrder && numOfIntersections % 2 === 1;
     }
@@ -121,6 +124,7 @@ const getNextElementEndIndex = (path, index) => {
 
 
 const cleanPath = (path) => {
+    //let timeElapsed = new Date().getTime();
     // trim spaces
     path = path.trim();
     // replace all comma with space
@@ -180,6 +184,7 @@ const cleanPath = (path) => {
         }
     });
     //console.log(absoluteCoordPath);
+    //console.log("cleanPath took " + (new Date().getTime() - timeElapsed) + "ms");
     return absoluteCoordPath;
 }
 
@@ -248,7 +253,7 @@ const extractPaths = (svgString) => {
 
         const path = pathElement.getAttribute('d')
         let color = getColorFromSvgElement(pathElement);
-        console.log("color: " + color);
+        //console.log("color: " + color);
         if (color == null) {
             color = parentFillColor;
         }
@@ -269,7 +274,7 @@ const extractPaths = (svgString) => {
             });
         }
 
-        console.log("mask paths: " + currentPathMasks);
+        //console.log("mask paths: " + currentPathMasks);
 
         //const cleanedPath = cleanPath(path);
         const convertedAbsolutePath = cleanPath(path);
@@ -282,33 +287,42 @@ const extractPaths = (svgString) => {
             // check if the path contains holes as subpaths
             const fillRule = pathElement.getAttribute('fill-rule');
             let outerContour = null;
-
-            subPaths.forEach(subPath => {
-                console.log("subpath debug: " + subPath);
-                let selectedPoint = getPathPoints(subPath)[0];
+            let outerContourPoints = null;
+            let subPathData = []
+            subPaths.forEach((subPath, i) => {
+                //console.log("subpath debug: " + subPath);
+                let pathPoints = getPathPoints(subPath);
+                let selectedPoint = pathPoints[0];
                 if (selectedPoint == null || selectedPoint == undefined) {
-                    console.log("selected point is null, choosing the first point of the path");
+                    //console.log("selected point is null, choosing the first point of the path");
                     const commandIndex = getNextElementEndIndex(subPath, 0); // M
                     const xCoordEndIndex = getNextElementEndIndex(subPath, commandIndex);
                     const yCoordEndIndex = getNextElementEndIndex(subPath, xCoordEndIndex);
 
                     selectedPoint = [parseFloat(subPath.slice(commandIndex, xCoordEndIndex)),
                     parseFloat(subPath.slice(xCoordEndIndex, yCoordEndIndex))];
+                    subPathData.push({ points: pathPoints, subPath: subPath, firstPoint: selectedPoint });
                     return;
+                }else{
+                    subPathData.push({ points: pathPoints, subPath: subPath, firstPoint: selectedPoint });
                 }
-                console.log(selectedPoint);
-                const filteredPaths = subPaths.filter(p => p != subPath);
-                const numOfIntersections = polygonUtils.countPointPolygonIntersection(selectedPoint, filteredPaths.map(path => getPathPoints(path)));
+
+                //console.log(selectedPoint);
+                const filteredPathData = subPathData.filter(p => p.subPath != subPath);
+
+                const numOfIntersections = polygonUtils.countPointPolygonIntersection(selectedPoint, filteredPathData.map(p => p.points));
                 if (numOfIntersections % 2 === 0) { // if the point is outside an even number of polygon line segments, it is the outer contour
                     outerContour = subPath;
-                    console.log("found outer contour: " + outerContour);
+                    outerContourPoints = subPathData[i].points;
+                    //console.log("found outer contour: " + outerContour);
                     return;
                 }
             });
 
-            subPaths.forEach(subPath => {
+            subPaths.forEach((subPath, i) => {
                 // if the subpath is a hole, add it to the mask paths
-                if (isPathHole(subPath, subPaths, outerContour, fillRule)) {
+                const filteredPathData = subPathData.filter(p => p.subPath != subPath);
+                if (isPathHole(subPathData[i].firstPoint, subPathData[i].points,filteredPathData.map(p => p.points), outerContourPoints, fillRule)) {
                     currentPathMasks.push(subPath);
                 }
             });
@@ -322,7 +336,7 @@ const extractPaths = (svgString) => {
 
     });
 
-    console.log(extractedPaths);
+    //console.log(extractedPaths);
     return extractedPaths;
 };
 

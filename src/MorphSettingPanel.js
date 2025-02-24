@@ -13,7 +13,7 @@ function MorphSettingPanel({ onSettingChange }) {
             setEasing(newEasing);
             onSettingChange({ duration: duration, easing: newEasing });
         }
-        console.log(newEasing);
+        //console.log(newEasing);
     }
 
     return (
