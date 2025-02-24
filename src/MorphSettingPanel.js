@@ -66,7 +66,7 @@ function MorphSettingPanel({ onSettingChange }) {
                     color: 'black',
                     marginRight: '10px'
                 }}
-                >Easing</label>
+                >Easing Effect</label>
                 <select id="easing-select" value={easing} onChange={(e) => handleEasingSettingChange(e.target.value)}>
                     <option value="linear">Linear</option>
                     <option value="quad-in">Quad In</option>
@@ -90,9 +90,6 @@ function MorphSettingPanel({ onSettingChange }) {
                     <option value="elastic-in">Elastic In</option>
                     <option value="elastic-out">Elastic Out</option>
                     <option value="elastic-in-out">Elastic In-Out</option>
-                    <option value="back-in">Back In</option>
-                    <option value="back-out">Back Out</option>
-                    <option value="back-in-out">Back In-Out</option>
                 </select>
 
             </div>
