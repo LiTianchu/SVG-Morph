@@ -178,16 +178,25 @@ const getColorFromSvgElement = (pathElement) => {
         // try find style attribute
         const style = pathElement.getAttribute('style');
         if (style != null) {
+            const styleAttrs = style.split(';');
             // get fill: value
-            const fillIndex = style.indexOf('fill:');
-            if (fillIndex !== -1) {
-                const fillValue = style.slice(fillIndex + 5, style.indexOf(';', fillIndex));
-                fillColor = fillValue;
-            }
+            styleAttrs.forEach((attr, i) => {
+
+                const [key, value] = attr.split(':').map(s => s.trim());
+
+                if (!key || !value) { // skip empty values
+                    return;
+                }
+
+                if (key === 'fill') {
+                    console.log("fill color: " + value);
+                    fillColor = value;
+                }
+            });
         }
 
     }
-    return fillColor;
+    return fillColor === "none" ? "black" : fillColor;
 }
 
 const getStrokeDataFromSvgElement = (pathElement) => {
@@ -313,7 +322,7 @@ const extractPaths = (svgString) => {
             maskPathElements.forEach((maskPathElement, i) => {
                 const maskColor = getColorFromSvgElement(maskPathElement);
                 console.log("mask color: " + maskColor);
-                if(maskColor == null || maskColor ==="white"){ // skip white mask paths (bg) or paths with no fill
+                if (maskColor == null || maskColor === "white") { // skip white mask paths (bg) or paths with no fill
                     console.log("skipping mask path with color: " + maskColor);
                     return;
                 }
