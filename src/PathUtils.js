@@ -105,12 +105,26 @@ const getNextElementEndIndex = (path, index) => {
     return pathLength + 1; // end of string
 }
 
-
+const isPathStringValid = (path) => {
+    if (!path || typeof path !== 'string' || path === "") {
+        return false;
+    }
+    // check for disallowed values
+    if (/NaN|Infinity|undefined|null/i.test(path)) {
+        return false;
+    }
+    // path must start with "M" or "m"
+    if (path[0] !== 'M' && path[0] !== 'm') {
+        return false;
+    }
+    return true;
+}
 
 const cleanPath = (path) => {
     //let timeElapsed = new Date().getTime();
     // trim spaces
     path = path.trim();
+
     // replace all comma with space
     path = path.replace(/,/g, ' ');
 
@@ -123,12 +137,16 @@ const cleanPath = (path) => {
 
     // convert relative coordinates to absolute coordinates
     path.split(/(?=[mM])/).forEach((subPath, i) => { // split m or M while keeping it
+        if(subPath.includes("NaN")){
+            return;
+        }
         const command = subPath[0];
         subPath = subPath.slice(1); // remove the command
 
         if (subPath.trim().slice(-1) !== 'z' && subPath.trim().slice(-1) !== 'Z') { // if this path is not closed
             subPath += "Z"; // close the path
         }
+
         if (command === 'M') { // skip first one and record starting point
             const startingXCoordEndIndex = getNextElementEndIndex(subPath, 0);
             const startingYCoordEndIndex = getNextElementEndIndex(subPath, startingXCoordEndIndex);
@@ -196,7 +214,7 @@ const getColorFromSvgElement = (pathElement) => {
         }
 
     }
-    return fillColor === "none" ? "black" : fillColor;
+    return fillColor;
 }
 
 const getStrokeDataFromSvgElement = (pathElement) => {
@@ -218,7 +236,8 @@ const getStrokeDataFromSvgElement = (pathElement) => {
     let data = { strokeColor: strokeColor, strokeWidth: strokeWidth, strokeOpacity: strokeOpacity };
 
     if (style == null) {
-        console.log(data);
+        //console.log(data);
+        // return invisible stroke data if null
         return data;
     }
 
@@ -241,7 +260,8 @@ const getStrokeDataFromSvgElement = (pathElement) => {
         }
     })
 
-    console.log(data);
+    //console.log(data);
+    // return inivisble stroke data if null
     return data;
 }
 
@@ -270,15 +290,34 @@ const extractPaths = (svgString) => {
         if (color == null) {
             color = parentFillColor;
         }
+
+        let isStrokeColorDefined = true;
+        //let hasStrokeWidth = true;
+        //let hasStrokeOpacity = true;
+
         if (strokeData.strokeColor == null) {
             strokeData.strokeColor = parentStrokeData.strokeColor;
+
+            if (strokeData.strokeColor == null) {
+                isStrokeColorDefined = false;
+                strokeData.strokeColor = "black";
+            }
         }
+        //console.log("stroke color: " + strokeData.strokeColor);
         if (strokeData.strokeWidth == null) {
             strokeData.strokeWidth = parentStrokeData.strokeWidth;
+            if (strokeData.strokeWidth == null) {
+                strokeData.strokeWidth = isStrokeColorDefined ? 1: 0; // default stroke width is 1 if stroke color is defined
+            }
         }
+        //console.log("stroke width: " + strokeData.strokeWidth);
         if (strokeData.strokeOpacity == null) {
             strokeData.strokeOpacity = parentStrokeData.strokeOpacity;
+            if (strokeData.strokeOpacity == null) {
+                strokeData.strokeOpacity = isStrokeColorDefined ? 1 : 0; // default stroke opacity is 1 if stroke color is defined
+            }
         }
+        //console.log("stroke opacity: " + strokeData.strokeOpacity);
         const maskAttr = pathElement.getAttribute('mask');
 
         if (pathElement.tagName !== 'path') {
@@ -354,7 +393,9 @@ const extractPaths = (svgString) => {
                 }
 
                 const maskPath = maskPathElement.getAttribute('d');
-                currentPathMasks.push(maskPath);
+                if(isPathStringValid(maskPath)){
+                    currentPathMasks.push(maskPath);
+                }
             });
         }
 
@@ -362,6 +403,9 @@ const extractPaths = (svgString) => {
 
         //const cleanedPath = cleanPath(path);
         const convertedAbsolutePath = cleanPath(path);
+        if(!isPathStringValid(convertedAbsolutePath)){
+            return;
+        }
 
 
         // if path contains subpaths, split them into separate paths
@@ -374,7 +418,7 @@ const extractPaths = (svgString) => {
             let outerContourPoints = null;
             let subPathData = [];
             subPaths.forEach((subPath, i) => {
-                //console.log("subpath debug: " + subPath);
+                console.log("getting path points from sub path: " + subPath);
                 let pathPoints = getPathPoints(subPath);
                 let selectedPoint = pathPoints[0];
                 if (selectedPoint == null || selectedPoint == undefined) {
@@ -415,6 +459,7 @@ const extractPaths = (svgString) => {
             currentPathMasks.forEach((maskPath, i) => {
                 const maskPathData = subPathData.find(p => p.subPath === maskPath);
                 if (maskPathData == null || maskPathData == undefined) { // handle cases where the mask if pre-defined
+                    console.log("getting mask path points from pre-defined mask path");
                     maskPathPoints.push(getPathPoints(maskPath));
                 } else {
                     maskPathPoints.push(maskPathData.points);
@@ -424,6 +469,7 @@ const extractPaths = (svgString) => {
             subPaths.forEach(subPath => {
                 if (!currentPathMasks.includes(subPath)) { // if tis subpath is the main path
                     const mainPathPoints = subPathData.find(p => p.subPath === subPath).points;
+                    console.log(strokeData);
                     extractedPaths.push({ mainPath: subPath, mainPathPoints: mainPathPoints, maskPaths: currentPathMasks, maskPathPoints: maskPathPoints, fillColor: color, strokeData: strokeData });
                 }
             });

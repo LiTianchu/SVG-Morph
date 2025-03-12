@@ -106,10 +106,16 @@ function SVGMorph({ svgs, morphSetting, onLoadingStateChange }) {
         const initialPathNum = svgPathLists[i].length;
         for (let j = initialPathNum; j < maxPaths; j++) {
           if (morphSetting.oneToMany === 'duplicate') {
-            const dupIndex = j % initialPathNum;
+            //const dupIndex = j % initialPathNum;
+            const dupIndex = 0;
             svgPathLists[i].push(svgPathLists[i][dupIndex]); // duplicate the path
           } else if (morphSetting.oneToMany === 'appear') {
-            svgPathLists[i].push({ mainPath: `M${vbSize.x / 2},${vbSize.y / 2} Z`, maskPaths: [], fillColor: "black" }); // add an empty path
+            svgPathLists[i].push({ // add an empty path
+              mainPath: `M${vbSize.x / 2},${vbSize.y / 2} Z`,
+              maskPaths: [],
+              fillColor: "black",
+              strokeData: { strokeColor: "black", strokeWidth: 0, strokeOpacity: 0 }
+            }); 
           }
         }
       }
@@ -126,7 +132,7 @@ function SVGMorph({ svgs, morphSetting, onLoadingStateChange }) {
       console.log("generating interpolators for path at index " + pathIndex + " timestamp: " + (new Date().getTime() - timeElapsed));
       let selectedPathIndex = pathIndex;
       const initialPathIndex = pathIndex; // record initial path for looping back to original path
-      const pairByArea =false;
+      const pairByArea = false;
       const interpolatorsToEnd = svgPathLists.map((pathList, j) => {
         // pathList is the list of paths of the j-th svg
         const path = pathList[selectedPathIndex]; // current path
@@ -171,6 +177,8 @@ function SVGMorph({ svgs, morphSetting, onLoadingStateChange }) {
         const nextPairPath = svgPathLists[(j + 1) % svgPathLists.length][selectedPathIndex]; // next pair path
         let fromPathList = [path.mainPath];
         let toPathList = [nextPairPath.mainPath];
+        const fromStroke = path.strokeData;
+        const toStroke = nextPairPath.strokeData;
         const fromFillColor = path.fillColor;
         const toFillColor = nextPairPath.fillColor;
 
@@ -212,7 +220,7 @@ function SVGMorph({ svgs, morphSetting, onLoadingStateChange }) {
 
         //console.log("from path list: " + fromPathList);
         //console.log("to path list: " + toPathList);
-        let interpolators = { mainPathInterpolator: null, maskPathInterpolators: [], fillColorInterpolator: null, stokeColorInterpolator: null, strokeWidthInterpolator: null };
+        let interpolators = { mainPathInterpolator: null, maskPathInterpolators: [], fillColorInterpolator: null, stokeColorInterpolator: null, strokeWidthInterpolator: null, strokeOpacityInterpolator: null };
         //console.log("max segment length: " + sizeX / 100);
         //console.log("generating interpolators for main path at index " + pathIndex + " timestamp: " + (new Date().getTime() - timeElapsed));
 
@@ -229,6 +237,12 @@ function SVGMorph({ svgs, morphSetting, onLoadingStateChange }) {
         }
 
         interpolators.fillColorInterpolator = d3.interpolateRgb(fromFillColor, toFillColor);
+        //console.log("from stroke: " + fromStroke.strokeColor + " , to stroke: " + toStroke.strokeColor);
+        //console.log("from stroke width: " + fromStroke.strokeWidth + " , to stroke width: " + toStroke.strokeWidth);
+        //console.log("from stroke opacity: " + fromStroke.strokeOpacity + " , to stroke opacity: " + toStroke.strokeOpacity);
+        interpolators.strokeOpacityInterpolator = d3.interpolate(fromStroke.strokeOpacity, toStroke.strokeOpacity);
+        interpolators.stokeColorInterpolator = d3.interpolateRgb(fromStroke.strokeColor, toStroke.strokeColor);
+        interpolators.strokeWidthInterpolator = d3.interpolate(fromStroke.strokeWidth, toStroke.strokeWidth);
 
         return interpolators;
       });
@@ -246,11 +260,15 @@ function SVGMorph({ svgs, morphSetting, onLoadingStateChange }) {
       svgPathLists = standardizePathNum(svgPathLists, newViewBoxSize);
 
       const maxMaskPathsNum = Math.max(...svgPathLists.flat().map(path => path.maskPaths.length));
-
+      console.log(svgPathLists);
       // iterate over each path of the first svg to generate the set of interpolators
       svgPathLists[0].forEach((mainMaskPair, i) => {
-        let firstMainPath = mainMaskPair.mainPath;
-        let firstFillColor = mainMaskPair.fillColor;
+        const firstMainPath = mainMaskPair.mainPath;
+        const firstFillColor = mainMaskPair.fillColor;
+        const firstStroke = mainMaskPair.strokeData;
+       //console.log("first main path: ");
+        //console.log(firstStroke);
+
         let firstMainPathMasks = [];
         for (let k = 0; k < maxMaskPathsNum; k++) {
           if (mainMaskPair.maskPaths[k] == null) {
@@ -282,6 +300,9 @@ function SVGMorph({ svgs, morphSetting, onLoadingStateChange }) {
           .attr('d', firstMainPath)
           .attr('fill', firstFillColor)
           .attr('id', `path-${i}`)
+          .attr('stroke', firstStroke.strokeColor)
+          .attr('stroke-width', firstStroke.strokeWidth)
+          .attr('stroke-opacity', firstStroke.strokeOpacity)
           .attr('fill-rule', 'nonzero')
           .attr('mask', `url(#mask-${i})`); // link to masks
 
@@ -335,6 +356,9 @@ function SVGMorph({ svgs, morphSetting, onLoadingStateChange }) {
         .duration(morphDuration)
         .attrTween('d', () => interpolatorsToEnd[interpolatorIdx].mainPathInterpolator) // shape
         .attrTween('fill', () => interpolatorsToEnd[interpolatorIdx].fillColorInterpolator) // color
+        .attrTween('stroke', () => interpolatorsToEnd[interpolatorIdx].stokeColorInterpolator) // stroke color
+        .attrTween('stroke-width', () => interpolatorsToEnd[interpolatorIdx].strokeWidthInterpolator) // stroke width
+        .attrTween('stroke-opacity', () => interpolatorsToEnd[interpolatorIdx].strokeOpacityInterpolator) // stroke opacity
         .on('end', () => animateMainPath(pathElement, interpolatorsToEnd, (interpolatorIdx + 1) % interpolatorsToEnd.length));
     }
 
