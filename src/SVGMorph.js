@@ -107,9 +107,7 @@ function SVGMorph({ svgs, morphSetting, onLoadingStateChange }) {
         for (let j = initialPathNum; j < maxPaths; j++) {
           if (morphSetting.oneToMany === 'duplicate') {
             const dupIndex = j % initialPathNum;
-            console.log("duplicating path at " + j+ "%" + initialPathNum + " - " + dupIndex + " for svg " + i);
             svgPathLists[i].push(svgPathLists[i][dupIndex]); // duplicate the path
-            //svgPathLists[i].push(svgPathLists[i][0]); // duplicate the first path
           } else if (morphSetting.oneToMany === 'appear') {
             svgPathLists[i].push({ mainPath: `M${vbSize.x / 2},${vbSize.y / 2} Z`, maskPaths: [], fillColor: "black" }); // add an empty path
           }
@@ -128,7 +126,7 @@ function SVGMorph({ svgs, morphSetting, onLoadingStateChange }) {
       console.log("generating interpolators for path at index " + pathIndex + " timestamp: " + (new Date().getTime() - timeElapsed));
       let selectedPathIndex = pathIndex;
       const initialPathIndex = pathIndex; // record initial path for looping back to original path
-      const pairByArea = false;
+      const pairByArea =false;
       const interpolatorsToEnd = svgPathLists.map((pathList, j) => {
         // pathList is the list of paths of the j-th svg
         const path = pathList[selectedPathIndex]; // current path
@@ -214,7 +212,7 @@ function SVGMorph({ svgs, morphSetting, onLoadingStateChange }) {
 
         //console.log("from path list: " + fromPathList);
         //console.log("to path list: " + toPathList);
-        let interpolators = { mainPathInterpolator: null, maskPathInterpolators: [], fillColorInterpolator: null };
+        let interpolators = { mainPathInterpolator: null, maskPathInterpolators: [], fillColorInterpolator: null, stokeColorInterpolator: null, strokeWidthInterpolator: null };
         //console.log("max segment length: " + sizeX / 100);
         //console.log("generating interpolators for main path at index " + pathIndex + " timestamp: " + (new Date().getTime() - timeElapsed));
 

@@ -53,30 +53,14 @@ const getPathPoints = (path) => {
 }
 
 const isPathHole = (selectedPoint, pathPoints, otherPathPoints, outerContourPoints, fillrule) => {
-    //let timeElapsed = new Date().getTime();
     //const pathPoints = getPathPoints(path);
     //const outerContourPoints = getPathPoints(outerContour);
     const outerContourWindingOrder = polygonUtils.getWindingOrder(outerContourPoints);
 
     //console.log("Path points: " + pathPoints);
-    //const filteredPaths = pathList.filter(p => p != path);
-    //let selectedPoint = pathPoints[0];
-    // if (selectedPoint == null || selectedPoint == undefined) {
-    //     //console.log("selected point is null, choosing the first point of the path");
-    //     const commandIndex = getNextElementEndIndex(path, 0); // M
-    //     const xCoordEndIndex = getNextElementEndIndex(path, commandIndex);
-    //     const yCoordEndIndex = getNextElementEndIndex(path, xCoordEndIndex);
-
-    //     selectedPoint = [parseFloat(path.slice(commandIndex, xCoordEndIndex)),
-    //     parseFloat(path.slice(xCoordEndIndex, yCoordEndIndex))];
-    //     return;
-    // }
-
-
     //console.log("selected point: " + selectedPoint);
     //console.log("filtered paths: " + filteredPaths);
     const numOfIntersections = polygonUtils.countPointPolygonIntersection(selectedPoint, otherPathPoints);
-    //console.log("num of intersections: " + numOfIntersections);
 
     //console.log("isPathHole took " + (new Date().getTime() - timeElapsed) + "ms");
     if (fillrule === 'evenodd') {
@@ -206,6 +190,52 @@ const getColorFromSvgElement = (pathElement) => {
     return fillColor;
 }
 
+const getStrokeDataFromSvgElement = (pathElement) => {
+    const style = pathElement.getAttribute('style');
+    const strokeColorAttr = pathElement.getAttribute('stroke');
+    const strokeWidthAttr = pathElement.getAttribute('stroke-width');
+    const strokeOpacityAttr = pathElement.getAttribute('stroke-opacity');
+
+    let strokeColor = strokeColorAttr;
+    let strokeWidth = strokeWidthAttr;
+    let strokeOpacity = strokeOpacityAttr;
+    if (strokeWidthAttr != null) {
+        strokeWidth = parseFloat(strokeWidth);
+    }
+    if (strokeOpacityAttr != null) {
+        strokeOpacity = strokeOpacityAttr.endsWith("%") ? parseFloat(strokeOpacityAttr) / 100 : parseFloat(strokeOpacityAttr);
+    }
+
+    let data = { strokeColor: strokeColor, strokeWidth: strokeWidth, strokeOpacity: strokeOpacity };
+
+    if (style == null) {
+        console.log(data);
+        return data;
+    }
+
+    const styleAttrs = style.split(';');
+
+    styleAttrs.forEach((attr, i) => {
+        const [key, value] = attr.split(':').map(s => s.trim());
+        if (!key || !value) { // skip empty values
+            return;
+        }
+
+        if (strokeColorAttr == null && key === 'stroke') {
+            data.strokeColor = value;
+        }
+        if (strokeWidthAttr == null && key === 'stroke-width') {
+            data.strokeWidth = parseFloat(value);
+        }
+        if (strokeOpacityAttr == null && key === 'stroke-opacity') {
+            data.strokeOpacity = value.endsWith("%") ? parseFloat(value) / 100 : parseFloat(value);
+        }
+    })
+
+    console.log(data);
+    return data;
+}
+
 const rawPathStringToPathElement = (pathString) => {
     const parser = new DOMParser();
     const svgDoc = parser.parseFromString(`<svg xmlns="http://www.w3.org/2000/svg"><path d="${pathString}"/></svg>`, 'image/svg+xml');
@@ -217,6 +247,7 @@ const extractPaths = (svgString) => {
     const parser = new DOMParser();
     const svgDoc = parser.parseFromString(svgString, 'image/svg+xml');
     const parentFillColor = getColorFromSvgElement(svgDoc.documentElement);
+    const parentStrokeData = getStrokeDataFromSvgElement(svgDoc.documentElement);
     //let pathList = Array.from(svgDoc.querySelectorAll(':scope > path')); // selects only path in the direct children
     let pathList = Array.from(svgDoc.querySelectorAll(':scope > path, :scope > rect, :scope > circle, :scope > ellipse, :scope > line, :scope > polyline, :scope > polygon')); // selects only path in the direct children
     let extractedPaths = [];
@@ -225,6 +256,21 @@ const extractPaths = (svgString) => {
     //convert non path elements to path elements
     pathList.forEach((pathElement, i) => {
         let currentPathMasks = [];
+        let color = getColorFromSvgElement(pathElement);
+        let strokeData = getStrokeDataFromSvgElement(pathElement);
+        if (color == null) {
+            color = parentFillColor;
+        }
+        if (strokeData.strokeColor == null) {
+            strokeData.strokeColor = parentStrokeData.strokeColor;
+        }
+        if (strokeData.strokeWidth == null) {
+            strokeData.strokeWidth = parentStrokeData.strokeWidth;
+        }
+        if (strokeData.strokeOpacity == null) {
+            strokeData.strokeOpacity = parentStrokeData.strokeOpacity;
+        }
+        const maskAttr = pathElement.getAttribute('mask');
 
         if (pathElement.tagName !== 'path') {
             let convertedPathString = null;
@@ -253,23 +299,51 @@ const extractPaths = (svgString) => {
         }
 
         const path = pathElement.getAttribute('d')
-        let color = getColorFromSvgElement(pathElement);
         //console.log("color: " + color);
-        if (color == null) {
-            color = parentFillColor;
-        }
 
 
         // check if path has a mask
-        const maskAttr = pathElement.getAttribute('mask');
         const maskId = maskAttr != null ? maskAttr.slice(5, -1) : null;
         //console.log("maskid is: " + maskId);
 
         if (maskId != null) {
             const maskElement = svgDoc.getElementById(maskId);
-            const maskPaths = Array.from(maskElement.querySelectorAll('path'));
+            const maskPathElements = Array.from(maskElement.querySelectorAll(':scope > path, :scope > rect, :scope > circle, :scope > ellipse, :scope > line, :scope > polyline, :scope > polygon'));
+            // handle mask paths that are not path elements
+            maskPathElements.forEach((maskPathElement, i) => {
+                const maskColor = getColorFromSvgElement(maskPathElement);
+                console.log("mask color: " + maskColor);
+                if(maskColor == null || maskColor ==="white"){ // skip white mask paths (bg) or paths with no fill
+                    console.log("skipping mask path with color: " + maskColor);
+                    return;
+                }
 
-            maskPaths.forEach((maskPathElement, i) => {
+                if (maskPathElement.tagName !== 'path') {
+                    let convertedPathString = null;
+                    switch (maskPathElement.tagName) {
+                        case 'rect':
+                            convertedPathString = pathConverter.rectToPath(maskPathElement);
+                            break;
+                        case 'circle':
+                            convertedPathString = pathConverter.circleToPath(maskPathElement);
+                            break;
+                        case 'ellipse':
+                            convertedPathString = pathConverter.ellipseToPath(maskPathElement);
+                            break;
+                        case 'line':
+                            convertedPathString = pathConverter.lineToPath(maskPathElement);
+                            break;
+                        case 'polyline':
+                            convertedPathString = pathConverter.polylineToPath(maskPathElement);
+                            break;
+                        case 'polygon':
+                            convertedPathString = pathConverter.polygonToPath(maskPathElement);
+                            break;
+                        default: console.log("unsupported mask path element tag: " + maskPathElement.tagName);
+                    }
+                    maskPathElement = rawPathStringToPathElement(convertedPathString);
+                }
+
                 const maskPath = maskPathElement.getAttribute('d');
                 currentPathMasks.push(maskPath);
             });
@@ -304,7 +378,7 @@ const extractPaths = (svgString) => {
                     parseFloat(subPath.slice(xCoordEndIndex, yCoordEndIndex))];
                     subPathData.push({ points: pathPoints, subPath: subPath, firstPoint: selectedPoint });
                     return;
-                }else{
+                } else {
                     subPathData.push({ points: pathPoints, subPath: subPath, firstPoint: selectedPoint });
                 }
 
@@ -323,17 +397,17 @@ const extractPaths = (svgString) => {
             subPaths.forEach((subPath, i) => {
                 // if the subpath is a hole, add it to the mask paths
                 const filteredPathData = subPathData.filter(p => p.subPath != subPath);
-                if (isPathHole(subPathData[i].firstPoint, subPathData[i].points,filteredPathData.map(p => p.points), outerContourPoints, fillRule)) {
+                if (isPathHole(subPathData[i].firstPoint, subPathData[i].points, filteredPathData.map(p => p.points), outerContourPoints, fillRule)) {
                     currentPathMasks.push(subPath);
                 }
             });
 
             let maskPathPoints = [];
-            currentPathMasks.forEach((maskPath,i)=>{
+            currentPathMasks.forEach((maskPath, i) => {
                 const maskPathData = subPathData.find(p => p.subPath === maskPath);
-                if(maskPathData == null || maskPathData == undefined){ // handle cases where the mask if pre-defined
+                if (maskPathData == null || maskPathData == undefined) { // handle cases where the mask if pre-defined
                     maskPathPoints.push(getPathPoints(maskPath));
-                }else{
+                } else {
                     maskPathPoints.push(maskPathData.points);
                 }
             });
@@ -341,7 +415,7 @@ const extractPaths = (svgString) => {
             subPaths.forEach(subPath => {
                 if (!currentPathMasks.includes(subPath)) { // if tis subpath is the main path
                     const mainPathPoints = subPathData.find(p => p.subPath === subPath).points;
-                    extractedPaths.push({ mainPath: subPath,mainPathPoints: mainPathPoints, maskPaths: currentPathMasks, maskPathPoints: maskPathPoints, fillColor: color });
+                    extractedPaths.push({ mainPath: subPath, mainPathPoints: mainPathPoints, maskPaths: currentPathMasks, maskPathPoints: maskPathPoints, fillColor: color, strokeData: strokeData });
                 }
             });
         }

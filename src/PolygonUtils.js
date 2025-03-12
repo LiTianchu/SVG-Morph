@@ -56,6 +56,10 @@ const countPointPolygonIntersection = (point, polygonPaths) => {
 }
 
 const computePolygonAreaSigned = (points) => {
+    if (!points || points.length < 3) {
+        return 0;
+    }
+
     let sum = 0;
     // calculate signed area using shoelace theorem
     for (let i = 0; i < points.length; i++) {
@@ -67,7 +71,11 @@ const computePolygonAreaSigned = (points) => {
 }
 
 const computePolygonArea = (points) => {
-    return Math.abs(computePolygonAreaSigned(points))/2; // A = 1/2 * |signed sum|
+    if (!points || points.length < 3) {
+        return 0;
+    }
+
+    return Math.abs(computePolygonAreaSigned(points)) / 2; // A = 1/2 * |signed sum|
 }
 
 
