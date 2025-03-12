@@ -1,9 +1,10 @@
 import React, { useEffect, useRef, useState } from 'react';
 import * as d3 from 'd3';
 import { interpolate } from 'flubber';
-import pathUtils from './PathUtils';
-import miscUtils from './MiscUtils';
+import PathUtils from './PathUtils';
+import MiscUtils from './MiscUtils';
 import { createFFmpeg, fetchFile } from '@ffmpeg/ffmpeg';
+import PolygonUtils from './PolygonUtils';
 
 function SVGMorph({ svgs, morphSetting, onLoadingStateChange }) {
   const svgRef = useRef(null);
@@ -21,9 +22,9 @@ function SVGMorph({ svgs, morphSetting, onLoadingStateChange }) {
   const [currentSvgs, setCurrentSvgs] = useState([]);
 
   useEffect(() => {
-    if (morphSetting.oneToMany === currentMorphSetting.oneToMany && 
-                morphSetting.quality === currentMorphSetting.quality && 
-                currentSvgs === svgs) {
+    if (morphSetting.oneToMany === currentMorphSetting.oneToMany &&
+      morphSetting.quality === currentMorphSetting.quality &&
+      currentSvgs === svgs) {
       setCurrentSvgs(svgs);
       setCurrentMorphSetting(morphSetting);
       return;
@@ -46,7 +47,7 @@ function SVGMorph({ svgs, morphSetting, onLoadingStateChange }) {
       return;
     }
 
-    const computeViewBoxAsync = () => {
+    const computeViewBox = () => {
       onLoadingStateChange(false, false, { text: "Computing viewbox size..." });
       console.log("computing viewbox size timestamp: " + (new Date().getTime() - timeElapsed));
 
@@ -70,7 +71,7 @@ function SVGMorph({ svgs, morphSetting, onLoadingStateChange }) {
             sizeY = svgViewBoxSize[1];
           }
         } else {
-          const { width, height } = pathUtils.getWidthHeight(svgElement);
+          const { width, height } = PathUtils.getWidthHeight(svgElement);
           if (width > sizeX) {
             sizeX = width;
           }
@@ -85,15 +86,15 @@ function SVGMorph({ svgs, morphSetting, onLoadingStateChange }) {
     }
 
 
-    const extractPathAysnc = () => {
+    const extractPath = () => {
       onLoadingStateChange(false, false, { text: "Extracting paths..." });
       console.log("extracting paths timestamp: " + (new Date().getTime() - timeElapsed));
       // extract path to get the list of paths of each svg
-      const svgPathLists = svgs.map(pathUtils.extractPaths);
+      const svgPathLists = svgs.map(PathUtils.extractPaths);
       return svgPathLists
     }
 
-    const standardizePathNumAsync = (svgPathLists, vbSize) => {
+    const standardizePathNum = (svgPathLists, vbSize) => {
       // make all svgs have the same number of paths
       onLoadingStateChange(false, false, { text: "Standardizing number of paths..." });
       console.log("standardizing number of paths timestamp: " + (new Date().getTime() - timeElapsed));
@@ -102,9 +103,13 @@ function SVGMorph({ svgs, morphSetting, onLoadingStateChange }) {
       //console.log("max paths: " + maxPaths);
       //console.log("max mask paths: " + maxMaskPathsNum);
       for (let i = 0; i < svgPathLists.length; i++) {
-        for (let j = svgPathLists[i].length; j < maxPaths; j++) {
+        const initialPathNum = svgPathLists[i].length;
+        for (let j = initialPathNum; j < maxPaths; j++) {
           if (morphSetting.oneToMany === 'duplicate') {
-            svgPathLists[i].push(svgPathLists[i][0]); // duplicate the first path
+            const dupIndex = j % initialPathNum;
+            console.log("duplicating path at " + j+ "%" + initialPathNum + " - " + dupIndex + " for svg " + i);
+            svgPathLists[i].push(svgPathLists[i][dupIndex]); // duplicate the path
+            //svgPathLists[i].push(svgPathLists[i][0]); // duplicate the first path
           } else if (morphSetting.oneToMany === 'appear') {
             svgPathLists[i].push({ mainPath: `M${vbSize.x / 2},${vbSize.y / 2} Z`, maskPaths: [], fillColor: "black" }); // add an empty path
           }
@@ -118,13 +123,54 @@ function SVGMorph({ svgs, morphSetting, onLoadingStateChange }) {
       return svgPathLists;
     }
 
-    const getInterpolatorTillEndAsync = (svgPathLists, pathIndex, maxSegmentLength) => {
+    const getInterpolatorTillEnd = (svgPathLists, pathIndex, maxSegmentLength, used) => {
       onLoadingStateChange(false, false, { text: "Generating interpolators for path at index " + pathIndex });
       console.log("generating interpolators for path at index " + pathIndex + " timestamp: " + (new Date().getTime() - timeElapsed));
-
+      let selectedPathIndex = pathIndex;
+      const initialPathIndex = pathIndex; // record initial path for looping back to original path
+      const pairByArea = false;
       const interpolatorsToEnd = svgPathLists.map((pathList, j) => {
-        const path = pathList[pathIndex];
-        const nextPairPath = svgPathLists[(j + 1) % svgPathLists.length][pathIndex];
+        // pathList is the list of paths of the j-th svg
+        const path = pathList[selectedPathIndex]; // current path
+
+        used[j][selectedPathIndex] = true; // mark the path as used
+
+        if (pairByArea) {
+
+          if (j === svgPathLists.length - 1) { // if this is the last svg
+            // loop back to the initial path
+            selectedPathIndex = initialPathIndex; // set the next pair path index
+          } else { // choose the next pair path based on area difference
+
+            // find the suitable pair path index by 
+            const nextSvgPathList = svgPathLists[(j + 1) % svgPathLists.length];
+            let smallestAbsAreaDiff = Number.MAX_VALUE;
+            let nextPairPathIndex = -1;
+
+            nextSvgPathList.forEach((nextSvgPath, nextPIndex) => {
+              if (!used[(j + 1)][nextPIndex]) { // if this path is not marked as used
+                // compute the area difference between the two paths
+                const pathArea = PolygonUtils.computePolygonArea(path.mainPathPoints);
+                const nextPathArea = PolygonUtils.computePolygonArea(nextSvgPath.mainPathPoints);
+                const absAreaDiff = Math.abs(pathArea - nextPathArea);
+                if (absAreaDiff < smallestAbsAreaDiff) {
+                  smallestAbsAreaDiff = absAreaDiff;
+                  nextPairPathIndex = nextPIndex;
+                }
+              }
+            });
+
+            if (nextPairPathIndex === -1) {
+              console.error("No suitable pair path found for svg " + j + " path at index " + pathIndex);
+              return;
+            }
+
+            selectedPathIndex = nextPairPathIndex; // set the next pair path index
+          }
+        }
+
+
+        const nextPairPath = svgPathLists[(j + 1) % svgPathLists.length][selectedPathIndex]; // next pair path
         let fromPathList = [path.mainPath];
         let toPathList = [nextPairPath.mainPath];
         const fromFillColor = path.fillColor;
@@ -137,12 +183,13 @@ function SVGMorph({ svgs, morphSetting, onLoadingStateChange }) {
         //console.log("mask paths: " + path.maskPaths);
         //console.log("next pair mask paths: " + nextPairPath.maskPaths);
 
+        // fill in the missing mask paths for both from and to paths
         const maxMaskPathsNum = Math.max(...svgPathLists.flat().map(path => path.maskPaths.length));
         for (let k = 0; k < maxMaskPathsNum; k++) {
           if (path.maskPaths[k] == null) {
             // create a empty mask path
             //console.log("from: empty mask path");
-            const center = pathUtils.computePathCenter(path.mainPath);
+            const center = PathUtils.computePathCenter(path.mainPath);
             // add an empty path at the certer
             fromPathList.push(`M${center.x},${center.y} Z`);
 
@@ -154,7 +201,7 @@ function SVGMorph({ svgs, morphSetting, onLoadingStateChange }) {
           if (nextPairPath.maskPaths[k] == null) {
             // create a empty mask path
             //console.log("to: empty mask path");
-            const center = pathUtils.computePathCenter(nextPairPath.mainPath);
+            const center = PathUtils.computePathCenter(nextPairPath.mainPath);
             // add an empty path at the certer
             toPathList.push(`M${center.x},${center.y} Z`);
           }
@@ -170,10 +217,14 @@ function SVGMorph({ svgs, morphSetting, onLoadingStateChange }) {
         let interpolators = { mainPathInterpolator: null, maskPathInterpolators: [], fillColorInterpolator: null };
         //console.log("max segment length: " + sizeX / 100);
         //console.log("generating interpolators for main path at index " + pathIndex + " timestamp: " + (new Date().getTime() - timeElapsed));
+
+        // generate interpolators for main path
         const mainInterpolator = interpolate(fromPathList[0], toPathList[0], { maxSegmentLength: maxSegmentLength });
         interpolators.mainPathInterpolator = mainInterpolator;
 
         //console.log("generating interpolators for mask path at index " + pathIndex + " timestamp: " + (new Date().getTime() - timeElapsed));
+
+        // generate interpolators for mask paths
         for (let k = 1; k < fromPathList.length; k++) {
           const maskPathInterpolator = interpolate(fromPathList[k], toPathList[k], { maxSegmentLength: maxSegmentLength });
           interpolators.maskPathInterpolators.push(maskPathInterpolator);
@@ -186,15 +237,15 @@ function SVGMorph({ svgs, morphSetting, onLoadingStateChange }) {
       return interpolatorsToEnd;
     }
 
-    const setUpInterpolationAsync = () => {
+    const setUpInterpolation = () => {
       onLoadingStateChange(false, false, { text: "Starting to set up interpolation..." });
       console.log("setting up interpolation timestamp: " + (new Date().getTime() - timeElapsed));
       //await new Promise((resolve) => setTimeout(resolve, 2000));
 
-      const newViewBoxSize = computeViewBoxAsync();
-      const maxSegmentLength = newViewBoxSize.x / (morphSetting.quality*10);
-      let svgPathLists = extractPathAysnc(svgs);
-      svgPathLists = standardizePathNumAsync(svgPathLists, newViewBoxSize);
+      const newViewBoxSize = computeViewBox();
+      const maxSegmentLength = newViewBoxSize.x / (morphSetting.quality * 10);
+      let svgPathLists = extractPath(svgs);
+      svgPathLists = standardizePathNum(svgPathLists, newViewBoxSize);
 
       const maxMaskPathsNum = Math.max(...svgPathLists.flat().map(path => path.maskPaths.length));
 
@@ -205,13 +256,14 @@ function SVGMorph({ svgs, morphSetting, onLoadingStateChange }) {
         let firstMainPathMasks = [];
         for (let k = 0; k < maxMaskPathsNum; k++) {
           if (mainMaskPair.maskPaths[k] == null) {
-            const center = pathUtils.computePathCenter(firstMainPath);
+            const center = PathUtils.computePathCenter(firstMainPath);
             firstMainPathMasks.push(`M${center.x},${center.y} Z`);
           } else {
             firstMainPathMasks.push(mainMaskPair.maskPaths[k]);
           }
         }
-        const interpolatorsToEnd = getInterpolatorTillEndAsync(svgPathLists, i, maxSegmentLength);
+        const used = Array.from({ length: svgs.length }, () => Array.from({ length: svgPathLists[0].length }, () => false)); // table to mark used paths used[j][i] = true if the i-th path of the j-th svg is used
+        const interpolatorsToEnd = getInterpolatorTillEnd(svgPathLists, i, maxSegmentLength, used);
 
         // generate initial elements for morphing
         const maskTagElement = d3.select(svgRef.current).append('mask')
@@ -249,7 +301,7 @@ function SVGMorph({ svgs, morphSetting, onLoadingStateChange }) {
       console.log("intiialized after " + initialized);
     }
 
-    setUpInterpolationAsync();
+    setUpInterpolation();
 
     return () => {
       d3.select(svgRef.current).selectAll('*').interrupt();
@@ -276,7 +328,7 @@ function SVGMorph({ svgs, morphSetting, onLoadingStateChange }) {
 
     const morphDuration = morphSetting.duration;
     const easing = morphSetting.easing;
-    const d3Easing = miscUtils.getD3Easing(easing);
+    const d3Easing = MiscUtils.getD3Easing(easing);
 
     function animateMainPath(pathElement, interpolatorsToEnd, interpolatorIdx) {
       d3.select(pathElement.node())

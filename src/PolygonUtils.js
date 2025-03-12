@@ -1,11 +1,5 @@
 const getWindingOrder = (points) => {
-    let sum = 0;
-    // calculate signed area using shoelace theorem
-    for (let i = 0; i < points.length; i++) {
-        let [x1, y1] = points[i];
-        let [x2, y2] = points[(i + 1) % points.length]; // loop back at the end
-        sum += x1 * y2 - x2 * y1;
-    }
+    const sum = computePolygonAreaSigned(points);
 
     // note: in normal cartesian coordinates positive signed area = CCW, negative signed area = CW
     // but svg uses inverted y axis, so the result is inverted
@@ -61,10 +55,24 @@ const countPointPolygonIntersection = (point, polygonPaths) => {
     return intersectionCount;
 }
 
+const computePolygonAreaSigned = (points) => {
+    let sum = 0;
+    // calculate signed area using shoelace theorem
+    for (let i = 0; i < points.length; i++) {
+        let [x1, y1] = points[i];
+        let [x2, y2] = points[(i + 1) % points.length]; // loop back at the end
+        sum += x1 * y2 - x2 * y1;
+    }
+    return sum;
+}
+
+const computePolygonArea = (points) => {
+    return Math.abs(computePolygonAreaSigned(points))/2; // A = 1/2 * |signed sum|
+}
 
 
 const getVector = (point1, point2) => {
     return { x: point2.x - point1.x, y: point2.y - point1.y };
 }
 
-export default { getWindingOrder, pointArrToVector, countPointPolygonIntersection, getVector }
+export default { getWindingOrder, pointArrToVector, countPointPolygonIntersection, computePolygonAreaSigned, computePolygonArea, getVector }

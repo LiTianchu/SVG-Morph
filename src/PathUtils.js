@@ -212,6 +212,7 @@ const rawPathStringToPathElement = (pathString) => {
     return svgDoc.documentElement.getElementsByTagName('path')[0];
 }
 
+
 const extractPaths = (svgString) => {
     const parser = new DOMParser();
     const svgDoc = parser.parseFromString(svgString, 'image/svg+xml');
@@ -288,7 +289,7 @@ const extractPaths = (svgString) => {
             const fillRule = pathElement.getAttribute('fill-rule');
             let outerContour = null;
             let outerContourPoints = null;
-            let subPathData = []
+            let subPathData = [];
             subPaths.forEach((subPath, i) => {
                 //console.log("subpath debug: " + subPath);
                 let pathPoints = getPathPoints(subPath);
@@ -327,9 +328,20 @@ const extractPaths = (svgString) => {
                 }
             });
 
+            let maskPathPoints = [];
+            currentPathMasks.forEach((maskPath,i)=>{
+                const maskPathData = subPathData.find(p => p.subPath === maskPath);
+                if(maskPathData == null || maskPathData == undefined){ // handle cases where the mask if pre-defined
+                    maskPathPoints.push(getPathPoints(maskPath));
+                }else{
+                    maskPathPoints.push(maskPathData.points);
+                }
+            });
+
             subPaths.forEach(subPath => {
-                if (!currentPathMasks.includes(subPath)) {
-                    extractedPaths.push({ mainPath: subPath, maskPaths: currentPathMasks, fillColor: color });
+                if (!currentPathMasks.includes(subPath)) { // if tis subpath is the main path
+                    const mainPathPoints = subPathData.find(p => p.subPath === subPath).points;
+                    extractedPaths.push({ mainPath: subPath,mainPathPoints: mainPathPoints, maskPaths: currentPathMasks, maskPathPoints: maskPathPoints, fillColor: color });
                 }
             });
         }
