@@ -1,5 +1,5 @@
-import pathConverter from "./PathConverter";
-import polygonUtils from "./PolygonUtils";
+import PathConverter from "./PathConverter";
+import PolygonUtils from "./PolygonUtils";
 
 const getWidthHeight = (svgElement) => {
     const width = svgElement.width.baseVal.value || parseFloat(svgElement.getAttribute('width')) || svgElement.viewBox.baseVal.width;
@@ -55,12 +55,12 @@ const getPathPoints = (path) => {
 const isPathHole = (selectedPoint, pathPoints, otherPathPoints, outerContourPoints, fillrule) => {
     //const pathPoints = getPathPoints(path);
     //const outerContourPoints = getPathPoints(outerContour);
-    const outerContourWindingOrder = polygonUtils.getWindingOrder(outerContourPoints);
+    const outerContourWindingOrder = PolygonUtils.getWindingOrder(outerContourPoints);
 
     //console.log("Path points: " + pathPoints);
     //console.log("selected point: " + selectedPoint);
     //console.log("filtered paths: " + filteredPaths);
-    const numOfIntersections = polygonUtils.countPointPolygonIntersection(selectedPoint, otherPathPoints);
+    const numOfIntersections = PolygonUtils.countPointPolygonIntersection(selectedPoint, otherPathPoints);
 
     //console.log("isPathHole took " + (new Date().getTime() - timeElapsed) + "ms");
     if (fillrule === 'evenodd') {
@@ -68,7 +68,7 @@ const isPathHole = (selectedPoint, pathPoints, otherPathPoints, outerContourPoin
         // if the point is inside an odd number of polygons except itself, it is a hole
         return numOfIntersections % 2 === 1;
     } else { // non-zero fill rule
-        const windingOrder = polygonUtils.getWindingOrder(pathPoints);
+        const windingOrder = PolygonUtils.getWindingOrder(pathPoints);
         //console.log("winding order: " + windingOrder + " \n" + "path: " + path);
         // if the point is inside an odd number of polygons except itself plus the outer coutour has different winding order, it is a hole
         return windingOrder !== outerContourWindingOrder && numOfIntersections % 2 === 1;
@@ -109,10 +109,12 @@ const isPathStringValid = (path) => {
     if (!path || typeof path !== 'string' || path === "") {
         return false;
     }
+
     // check for disallowed values
     if (/NaN|Infinity|undefined|null/i.test(path)) {
         return false;
     }
+
     // path must start with "M" or "m"
     if (path[0] !== 'M' && path[0] !== 'm') {
         return false;
@@ -324,22 +326,22 @@ const extractPaths = (svgString) => {
             let convertedPathString = null;
             switch (pathElement.tagName) {
                 case 'rect':
-                    convertedPathString = pathConverter.rectToPath(pathElement);
+                    convertedPathString = PathConverter.rectToPath(pathElement);
                     break;
                 case 'circle':
-                    convertedPathString = pathConverter.circleToPath(pathElement);
+                    convertedPathString = PathConverter.circleToPath(pathElement);
                     break;
                 case 'ellipse':
-                    convertedPathString = pathConverter.ellipseToPath(pathElement);
+                    convertedPathString = PathConverter.ellipseToPath(pathElement);
                     break;
                 case 'line':
-                    convertedPathString = pathConverter.lineToPath(pathElement);
+                    convertedPathString = PathConverter.lineToPath(pathElement);
                     break;
                 case 'polyline':
-                    convertedPathString = pathConverter.polylineToPath(pathElement);
+                    convertedPathString = PathConverter.polylineToPath(pathElement);
                     break;
                 case 'polygon':
-                    convertedPathString = pathConverter.polygonToPath(pathElement);
+                    convertedPathString = PathConverter.polygonToPath(pathElement);
                     break;
                 default: console.log("unsupported path element tag: " + pathElement.tagName);
             }
@@ -370,22 +372,22 @@ const extractPaths = (svgString) => {
                     let convertedPathString = null;
                     switch (maskPathElement.tagName) {
                         case 'rect':
-                            convertedPathString = pathConverter.rectToPath(maskPathElement);
+                            convertedPathString = PathConverter.rectToPath(maskPathElement);
                             break;
                         case 'circle':
-                            convertedPathString = pathConverter.circleToPath(maskPathElement);
+                            convertedPathString = PathConverter.circleToPath(maskPathElement);
                             break;
                         case 'ellipse':
-                            convertedPathString = pathConverter.ellipseToPath(maskPathElement);
+                            convertedPathString = PathConverter.ellipseToPath(maskPathElement);
                             break;
                         case 'line':
-                            convertedPathString = pathConverter.lineToPath(maskPathElement);
+                            convertedPathString = PathConverter.lineToPath(maskPathElement);
                             break;
                         case 'polyline':
-                            convertedPathString = pathConverter.polylineToPath(maskPathElement);
+                            convertedPathString = PathConverter.polylineToPath(maskPathElement);
                             break;
                         case 'polygon':
-                            convertedPathString = pathConverter.polygonToPath(maskPathElement);
+                            convertedPathString = PathConverter.polygonToPath(maskPathElement);
                             break;
                         default: console.log("unsupported mask path element tag: " + maskPathElement.tagName);
                     }
@@ -438,7 +440,7 @@ const extractPaths = (svgString) => {
                 //console.log(selectedPoint);
                 const filteredPathData = subPathData.filter(p => p.subPath != subPath);
 
-                const numOfIntersections = polygonUtils.countPointPolygonIntersection(selectedPoint, filteredPathData.map(p => p.points));
+                const numOfIntersections = PolygonUtils.countPointPolygonIntersection(selectedPoint, filteredPathData.map(p => p.points));
                 if (numOfIntersections % 2 === 0) { // if the point is outside an even number of polygon line segments, it is the outer contour
                     outerContour = subPath;
                     outerContourPoints = subPathData[i].points;

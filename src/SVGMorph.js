@@ -105,17 +105,19 @@ function SVGMorph({ svgs, morphSetting, onLoadingStateChange }) {
       for (let i = 0; i < svgPathLists.length; i++) {
         const initialPathNum = svgPathLists[i].length;
         for (let j = initialPathNum; j < maxPaths; j++) {
+          const dupIndex = j % initialPathNum;
           if (morphSetting.oneToMany === 'duplicate') {
-            //const dupIndex = j % initialPathNum;
-            const dupIndex = 0;
-            svgPathLists[i].push(svgPathLists[i][dupIndex]); // duplicate the path
+            //const dupIndex = 0;
+            svgPathLists[i].splice(dupIndex, 0, svgPathLists[i][dupIndex]); // duplicate the path
+
           } else if (morphSetting.oneToMany === 'appear') {
+            
             svgPathLists[i].push({ // add an empty path
               mainPath: `M${vbSize.x / 2},${vbSize.y / 2} Z`,
               maskPaths: [],
               fillColor: "black",
               strokeData: { strokeColor: "black", strokeWidth: 0, strokeOpacity: 0 }
-            }); 
+            });
           }
         }
       }
@@ -266,7 +268,7 @@ function SVGMorph({ svgs, morphSetting, onLoadingStateChange }) {
         const firstMainPath = mainMaskPair.mainPath;
         const firstFillColor = mainMaskPair.fillColor;
         const firstStroke = mainMaskPair.strokeData;
-       //console.log("first main path: ");
+        //console.log("first main path: ");
         //console.log(firstStroke);
 
         let firstMainPathMasks = [];
