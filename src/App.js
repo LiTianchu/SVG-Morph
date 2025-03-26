@@ -47,7 +47,7 @@ function App() {
         <SVGList onSvgsChange={setSvgs} />
         <div id="morphing-preview" style={{ display: 'flex', justifyContent: 'center', alignItems: 'center', position: 'relative', width: "300px", height: "300px" }}>
           <SVGMorph svgs={svgs} morphSetting={svgMorphingSettings} onLoadingStateChange={handleLoadingStateChange} />
-          <LoadingInfoView loadingInfoList={loadingInfoList} isMorphing={isMorphing} />
+          {/* <LoadingInfoView loadingInfoList={loadingInfoList} isMorphing={isMorphing} /> */}
         </div>
         <MorphSettingPanel onSettingChange={setSvgMorphingSettings} />
       </header>

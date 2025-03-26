@@ -3,13 +3,13 @@ import * as d3 from 'd3';
 import { interpolate } from 'flubber';
 import PathUtils from './PathUtils';
 import MiscUtils from './MiscUtils';
-import { createFFmpeg, fetchFile } from '@ffmpeg/ffmpeg';
+import { FFmpeg } from '@ffmpeg/ffmpeg';
 import PolygonUtils from './PolygonUtils';
 
 function SVGMorph({ svgs, morphSetting, onLoadingStateChange }) {
   const svgRef = useRef(null);
   const canvasRef = useRef(null);
-  const pathsRef = useRef([]); // Store path elements to access them from button click
+  const pathsRef = useRef([]); // stores path elements and their interpolators
   const [viewBoxSize, setViewBoxSize] = useState({ x: 0, y: 0 });
   const [initialized, setInitialized] = useState(false);
   const [isMorphing, setIsMorphing] = useState(false);
@@ -111,7 +111,7 @@ function SVGMorph({ svgs, morphSetting, onLoadingStateChange }) {
             svgPathLists[i].splice(dupIndex, 0, svgPathLists[i][dupIndex]); // duplicate the path
 
           } else if (morphSetting.oneToMany === 'appear') {
-            
+
             svgPathLists[i].push({ // add an empty path
               mainPath: `M${vbSize.x / 2},${vbSize.y / 2} Z`,
               maskPaths: [],
@@ -387,35 +387,132 @@ function SVGMorph({ svgs, morphSetting, onLoadingStateChange }) {
 
   }, [initialized, morphSetting, svgs]);
 
-  // Button click handler to start animation on all paths
+  const saveImage = (dataUrl, fileName) => {
+    // save to disk for testing
+    const link = document.createElement('a');
+    link.href = dataUrl;
+    link.download = fileName;
+    document.body.appendChild(link);
+    link.click();
+    document.body.removeChild(link);
+  }
+
   const handleFrameExport = () => {
     const context = canvasRef.current.getContext('2d');
     const svg = d3.select(svgRef.current);
-    console.log(pathsRef.current);
     const numOfMorphs = pathsRef.current[0].interpolatorsToEnd.length;
     const numOfMaskPathsPerNormalPath = pathsRef.current[0].interpolatorsToEnd[0].maskPathInterpolators.length;
     console.log("num of morphs: " + numOfMorphs);
 
+    // get the easing function from the morph setting
+    const d3Easing = MiscUtils.getD3Easing(morphSetting.easing);
+
     const downloadQueue = [];
     for (let m = 0; m < numOfMorphs; m++) {
-
-      // create frames at intervals from 0 to 1
       const numFrames = 24; // 24 frames per second
-      const frames = Array.from({ length: numFrames }, (_, i) => i / (numFrames - 1)); // e.g. numFrames = 5, frames = [0, 0.25, 0.5, 0.75, 1];
+      const frames = Array.from({ length: numFrames }, (_, i) => i / (numFrames - 1));
       frames.forEach((t, frameIndex) => {
+        // get the eased time
+        const tEased = d3Easing(t);
+
+        // update main paths
         svg.selectAll(':scope > path').each(function (_, i) {
           const path = d3.select(this);
-          //console.log(i);
-          //console.log(pathsRef.current[i]);
           const interpolators = pathsRef.current[i].interpolatorsToEnd;
-          // print the interpolators object
-          console.log("m: " + m);
-          console.log(interpolators);
-          path.attr('d', interpolators[m].mainPathInterpolator(t));
-          path.attr('fill', interpolators[m].fillColorInterpolator(t));
+          path.attr('d', interpolators[m].mainPathInterpolator(tEased));
+          path.attr('fill', interpolators[m].fillColorInterpolator(tEased));
+          path.attr('stroke', interpolators[m].stokeColorInterpolator(tEased));
+          path.attr('stroke-width', interpolators[m].strokeWidthInterpolator(tEased));
+          path.attr('stroke-opacity', interpolators[m].strokeOpacityInterpolator(tEased));
+
         });
 
-        // interpolate mask paths
+        // update all mask paths
+        svg.selectAll('mask path').each(function (_, i) {
+          const maskPath = d3.select(this);
+          const pathIndex = Math.floor(i / numOfMaskPathsPerNormalPath);
+          const maskPathIndex = i % numOfMaskPathsPerNormalPath;
+          const interpolators = pathsRef.current[pathIndex].interpolatorsToEnd;
+          maskPath.attr('d', interpolators[m].maskPathInterpolators[maskPathIndex](tEased));
+        });
+
+        // serialize the updated SVG to an image source
+        const svgData = new XMLSerializer().serializeToString(svgRef.current);
+        const img = new Image();
+        img.src = `data:image/svg+xml;base64,${btoa(svgData)}`;
+        downloadQueue.push({ img, m, frameIndex });
+      });
+    }
+
+    // process export queue sequentially
+    const processQueue = () => {
+      if (downloadQueue.length === 0) { return; }
+      const { img, m, frameIndex } = downloadQueue.shift();
+      console.log("exporting: " + `image-morph${m}-frame${frameIndex}.png`);
+      context.clearRect(0, 0, canvasRef.current.width, canvasRef.current.height);
+      context.drawImage(img, 0, 0);
+      const pngDataUrl = canvasRef.current.toDataURL('image/png');
+      const link = document.createElement('a');
+      link.href = pngDataUrl;
+      link.download = `image-morph${m}-frame${frameIndex}.png`;
+      link.click();
+      setTimeout(processQueue, 100);
+    }
+
+    processQueue();
+  }
+
+  //  convert data URL to Uint8Array for ffmpeg 
+  const dataURLtoUint8Array = (dataUrl) => {
+    const base64 = dataUrl.split(',')[1];
+    const binaryString = atob(base64);
+    const len = binaryString.length;
+    const bytes = new Uint8Array(len);
+    for (let i = 0; i < len; i++) {
+      bytes[i] = binaryString.charCodeAt(i);
+    }
+    return bytes;
+  };
+
+  const sleep = (time) => {
+    return new Promise((resolve) => setTimeout(resolve, time));
+  }
+
+  //  button handler to export video using ffmpeg
+  const handleVideoExport = async () => {
+    // Use local WASM file from public directory
+    const localWasmPath = '/ffmpeg-core.wasm'; // Ensure this file exists in your public folder
+    const localCorePath = '/ffmpeg-core.js'; // Ensure this file exists in your public folder
+    console.log("Loading ffmpeg-core from:", localWasmPath);
+
+    const ffmpegInstance = new FFmpeg();
+
+    await ffmpegInstance.load({ log: true, coreURL: localCorePath, wasmURL: localWasmPath });
+
+    console.log("ffmpeg loaded");
+    const svg = d3.select(svgRef.current);
+    const numOfMorphs = pathsRef.current[0].interpolatorsToEnd.length;
+    const numOfMaskPathsPerNormalPath = pathsRef.current[0].interpolatorsToEnd[0].maskPathInterpolators.length;
+    const numFrames = 24; // 24 frames per second
+
+    console.log("creating video");
+    for (let m = 0; m < numOfMorphs; m++) {
+      for (let frameIndex = 0; frameIndex < numFrames; frameIndex++) {
+        const t = frameIndex / (numFrames - 1);
+        svg.selectAll(':scope > path').each(function (_, i) {
+          const path = d3.select(this);
+          const interpolators = pathsRef.current[i].interpolatorsToEnd;
+          path.attr('d', interpolators[m].mainPathInterpolator(t));
+          path.attr('fill', interpolators[m].fillColorInterpolator(t));
+          if (interpolators[m].stokeColorInterpolator)
+            path.attr('stroke', interpolators[m].stokeColorInterpolator(t));
+          if (interpolators[m].strokeWidthInterpolator)
+            path.attr('stroke-width', interpolators[m].strokeWidthInterpolator(t));
+          if (interpolators[m].strokeOpacityInterpolator)
+            path.attr('stroke-opacity', interpolators[m].strokeOpacityInterpolator(t));
+        });
+
+        // Update mask paths
         svg.selectAll('mask path').each(function (_, i) {
           const maskPath = d3.select(this);
           const pathIndex = Math.floor(i / numOfMaskPathsPerNormalPath);
@@ -424,37 +521,88 @@ function SVGMorph({ svgs, morphSetting, onLoadingStateChange }) {
           maskPath.attr('d', interpolators[m].maskPathInterpolators[maskPathIndex](t));
         });
 
+        // Serialize SVG, render to canvas and convert to image data
         const svgData = new XMLSerializer().serializeToString(svgRef.current);
+        const imgSrc = `data:image/svg+xml;base64,${btoa(svgData)}`;
+
+        const canvas = canvasRef.current;
+        const context = canvas.getContext('2d');
+        context.clearRect(0, 0, canvas.width, canvas.height);
         const img = new Image();
-        img.src = `data:image/svg+xml;base64,${btoa(svgData)}`;
+        img.src = imgSrc;
+        // Wait for the image to load
+        await new Promise((resolve) => { img.onload = resolve; });
+        context.drawImage(img, 0, 0);
 
-        downloadQueue.push({ img, m, frameIndex });
-      });
-    }
+        const dataUrl = canvas.toDataURL('image/png');
+        const data = dataURLtoUint8Array(dataUrl);
+        const fileName = `morph${m}_frame${String(frameIndex).padStart(3, '0')}.png`;
 
-    const processQueue = () => {
-      if (downloadQueue.length === 0) { return; }
+        // await sleep(100);
+        // saveImage(dataUrl, fileName);
 
-      const { img, m, frameIndex } = downloadQueue.shift(); // dequeue by remove first element from the array
-      console.log("image downloaded: " + `image-morph${m}-frame${frameIndex}.png`);
-      context.clearRect(0, 0, canvasRef.current.width, canvasRef.current.height);
-      context.drawImage(img, 0, 0);
-      const pngDataUrl = canvasRef.current.toDataURL('image/png');
+
+
+        // Write frame file to ffmpeg; filename format: morph{m}_frameXXX.png
+        //ffmpegInstance.FS('writeFile', fileName, data);
+        await ffmpegInstance.writeFile(fileName, data);
+        console.log("writing file: " + fileName);
+      }
+
+      console.log("starting ffmpeg exec");
+      // Encode video for each morph sequence
+      const outputFile = `morph${m}.mp4`;
+      await ffmpegInstance.exec([
+        '-framerate', '24',
+        '-i', `morph${m}_frame%03d.png`,
+        '-c:v', 'libx264',
+        '-preset', 'slow',
+        '-crf', '23',
+        '-pix_fmt', 'yuv420p',
+        '-movflags', '+faststart',
+        '-f', 'mp4',
+        outputFile
+      ]);
+
+      console.log("executed ffmpeg");
+
+      // Read the resulting video file and create a blob URL for download
+      // const videoData = ffmpegInstance.FS('readFile', outputFile);
+      const videoData = await ffmpegInstance.readFile(outputFile);
+      const videoBlob = new Blob([videoData.buffer], { type: 'video/mp4' });
+      const url = URL.createObjectURL(videoBlob);
+
+      console.log(outputFile);
+      console.log(videoData);
+      console.log(videoBlob);
+      // Trigger download
       const link = document.createElement('a');
-      link.href = pngDataUrl;
-      link.download = `image-morph${m}-frame${frameIndex}.png`;
+      link.href = url;
+      link.download = outputFile;
+      document.body.appendChild(link);
       link.click();
-      setTimeout(processQueue, 100); // Process the next item in the queue after a short delay
-    }
+      document.body.removeChild(link);
 
-    processQueue();
-  }
+      console.log("downloaded video: " + outputFile);
+
+      // Clean up: remove frame and video files from FS
+      // for (let frameIndex = 0; frameIndex < numFrames; frameIndex++) {
+      //   const frameFile = `morph${m}_frame${String(frameIndex).padStart(3, '0')}.png`;
+      //   ffmpegInstance.FS('unlink', frameFile);
+      // }
+      // ffmpegInstance.FS('unlink', outputFile);
+      console.log("terminated ffmpeg");
+    }
+    //ffmpegInstance.terminate();
+  };
 
   return (
     <div style={{ position: "absolute", width: "100%", height: "100%" }}>
       <div style={{ display: isMorphing ? 'flex' : 'none', justifyContent: 'space-around', alignItems: 'center' }}>
-        <svg ref={svgRef} width="100%" height="100%" viewBox={"0 0 " + viewBoxSize.x + " " + viewBoxSize.y}></svg>
+        <svg ref={svgRef} width="100%" height="100%" viewBox={`0 0 ${viewBoxSize.x} ${viewBoxSize.y}`}></svg>
+        {/* You can keep both buttons if you want to download frames or video */}
         <button onClick={handleFrameExport}>Export Frames</button>
+        <button onClick={handleVideoExport}>Export Video</button>
         <canvas ref={canvasRef} width="500" height="500" style={{ display: 'none' }}></canvas>
       </div>
     </div>
