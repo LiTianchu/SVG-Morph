@@ -45,16 +45,30 @@ function SVGList({ onSvgsChange }) {
     }, [svgs, uploaders]);
 
     return (
-        <div style={{ display: 'grid', gridTemplateColumns: 'repeat(auto-fill, minmax(350px, 1fr))', gap: '10px', gridAutoFlow: 'column' }} className="svg-list">
-            {
-                uploaders.map((uploader, index) => (
-                    <div key={uploader.id} id={uploader.id + "_uploader"} style={{ display: 'flex', flexDirection: 'column', alignItems: 'center' }}>
-                        <SVGUploader onSvgUploaded={(svg) => handleSvgUploaded(svg, index)} index={index} />
-                        <button key={uploader.id + "_remove_btn"} id={uploader.id + "_remove_btn"} onClick={() => removeUploader(uploader.id, index)} style={{ marginTop: '10px' }}>Remove</button>
-                    </div>
-                ))
-            }
-        </div>
+           <div
+        style={{
+            width: '85%',
+            marginBottom: '50px',
+            display: 'grid',
+            gridTemplateColumns: 'repeat(auto-fit, minmax(350px, 1fr))',
+            gap: '10px'
+        }}
+        className="svg-list"
+    >
+        {uploaders.map((uploader, index) => (
+            <div key={uploader.id} id={uploader.id + "_uploader"} style={{ display: 'flex', flexDirection: 'column', alignItems: 'center' }}>
+                <SVGUploader onSvgUploaded={(svg) => handleSvgUploaded(svg, index)} index={index} />
+                <button
+                    key={uploader.id + "_remove_btn"}
+                    id={uploader.id + "_remove_btn"}
+                    onClick={() => removeUploader(uploader.id, index)}
+                    style={{ marginTop: '10px' }}
+                >
+                    Remove
+                </button>
+            </div>
+        ))}
+    </div>
     );
 }
 

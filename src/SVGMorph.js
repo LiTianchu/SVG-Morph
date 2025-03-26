@@ -4,6 +4,7 @@ import { interpolate } from 'flubber';
 import PathUtils from './PathUtils';
 import MiscUtils from './MiscUtils';
 import { FFmpeg } from '@ffmpeg/ffmpeg';
+import { toBlobURL,fetchFile } from '@ffmpeg/util';
 import PolygonUtils from './PolygonUtils';
 
 function SVGMorph({ svgs, morphSetting, onLoadingStateChange }) {
@@ -20,6 +21,34 @@ function SVGMorph({ svgs, morphSetting, onLoadingStateChange }) {
     oneToMany: 'duplicate'
   });
   const [currentSvgs, setCurrentSvgs] = useState([]);
+  const ffmpegRef = useRef(null);
+
+  // video export settings
+  const separated = false;
+  const scaleFactor = 2; // scale factor for canvas
+  const numFrames = 30; // frames per second
+
+  //let ffmpegRef.current = new FFmpeg();
+  // use local WASM file and core from public directory
+  //const baseURL = 'https://unpkg.com/@ffmpeg/core@0.12.6/dist/umd'
+  const localWasmPath = '/ffmpeg-core.wasm';
+  const localCorePath = '/ffmpeg-core.js';
+
+  useEffect(() => {
+    const loadFFmpeg = async () => {
+      if (!ffmpegRef.current) {
+        ffmpegRef.current = new FFmpeg();
+
+        // await ffmpegRef.current.load({
+        //   coreURL: await toBlobURL(`${baseURL}/ffmpeg-core.js`, 'text/javascript'),
+        //   wasmURL: await toBlobURL(`${baseURL}/ffmpeg-core.wasm`, 'application/wasm'),
+        // });
+        await ffmpegRef.current.load({ log: true, coreURL: localCorePath, wasmURL: localWasmPath });
+        console.log("ffmpeg loaded");
+      }
+    };
+    loadFFmpeg();
+  }, []); // run once on mount to initialize ffmpeg
 
   useEffect(() => {
     if (morphSetting.oneToMany === currentMorphSetting.oneToMany &&
@@ -453,10 +482,8 @@ function SVGMorph({ svgs, morphSetting, onLoadingStateChange }) {
   }
 
   const handleFrameExport = () => {
+    if (!isMorphing) { return; }
     const context = canvasRef.current.getContext('2d');
-
-    const scaleFactor = 2; // scale factor for canvas
-    const numFrames = 30; // frames per second
 
     rescaleCanvas(scaleFactor);
     const downloadQueue = getFrameQueue(numFrames);
@@ -495,25 +522,12 @@ function SVGMorph({ svgs, morphSetting, onLoadingStateChange }) {
     return new Promise((resolve) => setTimeout(resolve, time));
   }
 
-  // TODO: make framerate and scale adjustable
+
   //  button handler to export video using ffmpeg
   const handleVideoExport = async () => {
-    // use local WASM file and core from public directory
-    const localWasmPath = '/ffmpeg-core.wasm';
-    const localCorePath = '/ffmpeg-core.js';
-
-    console.log("Loading ffmpeg-core from:", localWasmPath);
-
-    const separated = false;
-    const scaleFactor = 2; // scale factor for canvas
-    const numFrames = 30; // frames per second
-
+    if (!isMorphing) { return; }
     // scale canvas for export
     rescaleCanvas(scaleFactor);
-
-    const ffmpegInstance = new FFmpeg();
-    await ffmpegInstance.load({ log: true, coreURL: localCorePath, wasmURL: localWasmPath });
-    console.log("ffmpeg loaded");
 
     const numOfMorphs = pathsRef.current[0].interpolatorsToEnd.length;
     console.log("creating video");
@@ -522,6 +536,10 @@ function SVGMorph({ svgs, morphSetting, onLoadingStateChange }) {
     const frameQueue = getFrameQueue(numFrames);
     const canvas = canvasRef.current;
     const context = canvas.getContext('2d');
+
+    const fl = await ffmpegRef.current.listDir('/');
+    console.log("ffmpeg virtual FS files: ");
+    console.log(fl);
 
     for (const { img, m, frameIndex } of frameQueue) {
       // ensure image is loaded before drawing
@@ -544,19 +562,19 @@ function SVGMorph({ svgs, morphSetting, onLoadingStateChange }) {
       //saveImage(dataUrl, fileName);
 
       // write frame data to ffmpeg FS
-      await ffmpegInstance.writeFile(fileName, data);
-      console.log("writing file: " + fileName);
+      await ffmpegRef.current.writeFile(fileName, data);
+      console.log("write file in ffmpeg virtual FS: " + fileName);
     }
 
     // after writing all frames, encode the video(s)
     if (separated) {
       for (let m = 0; m < numOfMorphs; m++) {
+        console.log("executing ffmpeg for separated video of morph " + m);
         const outputFile = `morph${m}.mp4`;
-        await ffmpegInstance.exec([
+        await ffmpegRef.current.exec([
           '-framerate', `${numFrames}`,
           '-i', `morph${m}_frame%09d.png`,
           '-c:v', 'libx264',
-          '-preset', 'slow',
           '-crf', '23',
           '-pix_fmt', 'yuv420p',
           '-movflags', '+faststart',
@@ -565,7 +583,7 @@ function SVGMorph({ svgs, morphSetting, onLoadingStateChange }) {
         ]);
         console.log("executed ffmpeg for morph " + m);
 
-        const videoData = await ffmpegInstance.readFile(outputFile);
+        const videoData = await ffmpegRef.current.readFile(outputFile);
         const videoBlob = new Blob([videoData.buffer], { type: 'video/mp4' });
         const url = URL.createObjectURL(videoBlob);
 
@@ -579,12 +597,12 @@ function SVGMorph({ svgs, morphSetting, onLoadingStateChange }) {
         console.log("downloaded video: " + outputFile);
       }
     } else {
+      console.log("executing ffmpeg for combined video");
       const outputFile = 'morph.mp4';
-      await ffmpegInstance.exec([
+      await ffmpegRef.current.exec([
         '-framerate', `${numFrames}`,
         '-i', 'frame%09d.png', // all frames from all morphs
         '-c:v', 'libx264',
-        '-preset', 'slow',
         '-crf', '23',
         '-pix_fmt', 'yuv420p',
         '-movflags', '+faststart',
@@ -593,7 +611,7 @@ function SVGMorph({ svgs, morphSetting, onLoadingStateChange }) {
       ]);
       console.log("executed ffmpeg for combined video");
 
-      const videoData = await ffmpegInstance.readFile(outputFile);
+      const videoData = await ffmpegRef.current.readFile(outputFile);
       const videoBlob = new Blob([videoData.buffer], { type: 'video/mp4' });
       const url = URL.createObjectURL(videoBlob);
 
@@ -608,26 +626,39 @@ function SVGMorph({ svgs, morphSetting, onLoadingStateChange }) {
     }
 
     // clean up ffmpeg virtual FS files
-    const files = await ffmpegInstance.listDir('/');
+    const files = await ffmpegRef.current.listDir('/');
+    console.log("ffmpeg virtual FS files: ");
+    console.log(files);
+    const tmp = await ffmpegRef.current.listDir('/tmp');
+    console.log("ffmpeg virtual FS tmp files: ");
+    console.log(tmp);
     for (const file of files) {
       if (file.name && (file.name.endsWith('.png') || file.name.endsWith('.mp4'))) {
         try {
-          await ffmpegInstance.deleteFile(file.name);
-          console.log("cleaned file: " + file.name);
+          await ffmpegRef.current.deleteFile(file.name);
+          console.log("cleaned file from ffmpeg virtual FS: " + file.name);
         } catch (e) {
-          console.error("Error deleting file:", file.name, e);
+          console.error("Error deleting file from ffmpeg virtual FS:", file.name, e);
         }
       }
     }
+
+    window.location.reload();
   };
 
   return (
-    <div style={{ position: "absolute", width: "100%", height: "100%" }}>
-      <div style={{ display: isMorphing ? 'flex' : 'none', justifyContent: 'space-around', alignItems: 'center' }}>
-        <svg ref={svgRef} width="100%" height="100%" viewBox={`0 0 ${viewBoxSize.x} ${viewBoxSize.y}`}></svg>
-        <button onClick={handleFrameExport}>Export Frames</button>
-        <button onClick={handleVideoExport}>Export Video</button>
-        <canvas ref={canvasRef} width="500" height="500" style={{ display: 'none' }}></canvas>
+    <div style={{ width: "100%", height: "100%", marginBottom: "2em" }}>
+      <div style={{ display: isMorphing ? 'block' : 'none' }}>
+
+        <div style={{ display: 'flex', justifyContent: 'space-around', alignItems: 'center' }}>
+          <svg ref={svgRef} width="100%" height="100%" viewBox={`0 0 ${viewBoxSize.x} ${viewBoxSize.y}`}></svg>
+
+          <canvas ref={canvasRef} width="500" height="500" style={{ display: 'none' }}></canvas>
+        </div>
+        <div style={{ marginLeft: "10px", display: 'flex', justifyContent: 'space-around', alignItems: 'center' }}>
+          <button onClick={handleFrameExport}>Export Frames</button>
+          <button onClick={handleVideoExport}>Export MP4 Video</button>
+        </div>
       </div>
     </div>
   );
