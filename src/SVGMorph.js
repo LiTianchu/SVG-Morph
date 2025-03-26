@@ -397,6 +397,51 @@ function SVGMorph({ svgs, morphSetting, onLoadingStateChange }) {
     document.body.removeChild(link);
   }
 
+  const getFrameQueue = (frameCount) => {
+      const svg = d3.select(svgRef.current);
+    const numOfMorphs = pathsRef.current[0].interpolatorsToEnd.length;
+    const numOfMaskPathsPerNormalPath = pathsRef.current[0].interpolatorsToEnd[0].maskPathInterpolators.length;
+    console.log("num of morphs: " + numOfMorphs);
+     // get the easing function from the morph setting
+    const d3Easing = MiscUtils.getD3Easing(morphSetting.easing);
+    const downloadQueue = [];
+    for (let m = 0; m < numOfMorphs; m++) {
+      const numFrames = frameCount; // 24 frames per second
+      const frames = Array.from({ length: numFrames }, (_, i) => i / (numFrames - 1));
+      frames.forEach((t, frameIndex) => {
+        // get the eased time
+        const tEased = d3Easing(t);
+
+        // update main paths
+        svg.selectAll(':scope > path').each(function (_, i) {
+          const path = d3.select(this);
+          const interpolators = pathsRef.current[i].interpolatorsToEnd;
+          path.attr('d', interpolators[m].mainPathInterpolator(tEased));
+          path.attr('fill', interpolators[m].fillColorInterpolator(tEased));
+          path.attr('stroke', interpolators[m].stokeColorInterpolator(tEased));
+          path.attr('stroke-width', interpolators[m].strokeWidthInterpolator(tEased));
+          path.attr('stroke-opacity', interpolators[m].strokeOpacityInterpolator(tEased));
+
+        });
+
+        // update all mask paths
+        svg.selectAll('mask path').each(function (_, i) {
+          const maskPath = d3.select(this);
+          const pathIndex = Math.floor(i / numOfMaskPathsPerNormalPath);
+          const maskPathIndex = i % numOfMaskPathsPerNormalPath;
+          const interpolators = pathsRef.current[pathIndex].interpolatorsToEnd;
+          maskPath.attr('d', interpolators[m].maskPathInterpolators[maskPathIndex](tEased));
+        });
+
+        // serialize the updated SVG to an image source
+        const svgData = new XMLSerializer().serializeToString(svgRef.current);
+        const img = new Image();
+        img.src = `data:image/svg+xml;base64,${btoa(svgData)}`;
+        downloadQueue.push({ img, m, frameIndex });
+      });
+    }
+  }
+
   const handleFrameExport = () => {
     const context = canvasRef.current.getContext('2d');
     const svg = d3.select(svgRef.current);
@@ -478,12 +523,25 @@ function SVGMorph({ svgs, morphSetting, onLoadingStateChange }) {
     return new Promise((resolve) => setTimeout(resolve, time));
   }
 
+  // TODO: make framerate and scale adjustable
   //  button handler to export video using ffmpeg
   const handleVideoExport = async () => {
-    // Use local WASM file from public directory
-    const localWasmPath = '/ffmpeg-core.wasm'; // Ensure this file exists in your public folder
-    const localCorePath = '/ffmpeg-core.js'; // Ensure this file exists in your public folder
+    // use local WASM file and core from public directory
+    const localWasmPath = '/ffmpeg-core.wasm';
+    const localCorePath = '/ffmpeg-core.js';
+
     console.log("Loading ffmpeg-core from:", localWasmPath);
+
+    const separated = false;
+    const scaleFactor = 2; // scale factor for canvas
+    const numFrames = 30; // frames per second
+
+    const cWidth = canvasRef.current.width * scaleFactor;
+    const cHeight = canvasRef.current.height * scaleFactor;
+
+    // Resize canvas based on scale factor
+    canvasRef.current.width = cWidth;
+    canvasRef.current.height = cHeight;
 
     const ffmpegInstance = new FFmpeg();
 
@@ -493,9 +551,9 @@ function SVGMorph({ svgs, morphSetting, onLoadingStateChange }) {
     const svg = d3.select(svgRef.current);
     const numOfMorphs = pathsRef.current[0].interpolatorsToEnd.length;
     const numOfMaskPathsPerNormalPath = pathsRef.current[0].interpolatorsToEnd[0].maskPathInterpolators.length;
-    const numFrames = 24; // 24 frames per second
 
     console.log("creating video");
+
     for (let m = 0; m < numOfMorphs; m++) {
       for (let frameIndex = 0; frameIndex < numFrames; frameIndex++) {
         const t = frameIndex / (numFrames - 1);
@@ -512,7 +570,6 @@ function SVGMorph({ svgs, morphSetting, onLoadingStateChange }) {
             path.attr('stroke-opacity', interpolators[m].strokeOpacityInterpolator(t));
         });
 
-        // Update mask paths
         svg.selectAll('mask path').each(function (_, i) {
           const maskPath = d3.select(this);
           const pathIndex = Math.floor(i / numOfMaskPathsPerNormalPath);
@@ -521,7 +578,7 @@ function SVGMorph({ svgs, morphSetting, onLoadingStateChange }) {
           maskPath.attr('d', interpolators[m].maskPathInterpolators[maskPathIndex](t));
         });
 
-        // Serialize SVG, render to canvas and convert to image data
+        // serialize SVG, render to canvas and convert to image data
         const svgData = new XMLSerializer().serializeToString(svgRef.current);
         const imgSrc = `data:image/svg+xml;base64,${btoa(svgData)}`;
 
@@ -530,31 +587,73 @@ function SVGMorph({ svgs, morphSetting, onLoadingStateChange }) {
         context.clearRect(0, 0, canvas.width, canvas.height);
         const img = new Image();
         img.src = imgSrc;
-        // Wait for the image to load
+
+
+        // wait for the image to load
         await new Promise((resolve) => { img.onload = resolve; });
-        context.drawImage(img, 0, 0);
+        context.drawImage(img, 0, 0, canvas.width, canvas.height);
 
         const dataUrl = canvas.toDataURL('image/png');
         const data = dataURLtoUint8Array(dataUrl);
-        const fileName = `morph${m}_frame${String(frameIndex).padStart(3, '0')}.png`;
+        let fileName = `frame${String(frameIndex + numFrames * m).padStart(9, '0')}.png`;
+        if (separated) {
+          fileName = `morph${m}_frame${String(frameIndex).padStart(9, '0')}.png`;
+        }
 
         // await sleep(100);
         // saveImage(dataUrl, fileName);
 
-
-
-        // Write frame file to ffmpeg; filename format: morph{m}_frameXXX.png
-        //ffmpegInstance.FS('writeFile', fileName, data);
+        // write frame file to ffmpeg
         await ffmpegInstance.writeFile(fileName, data);
         console.log("writing file: " + fileName);
       }
 
-      console.log("starting ffmpeg exec");
-      // Encode video for each morph sequence
-      const outputFile = `morph${m}.mp4`;
+      if (separated) {
+        console.log("starting ffmpeg exec for separated video " + m);
+        // encode video for each morph sequence
+        const outputFile = `morph${m}.mp4`;
+
+        await ffmpegInstance.exec([
+          '-framerate', `${numFrames}`, // set framerate 
+          '-i', `morph${m}_frame%09d.png`, // input files
+          '-c:v', 'libx264', // set codec
+          '-preset', 'slow', // set encoding speed
+          '-crf', '23', // set quality
+          '-pix_fmt', 'yuv420p', // set pixel format
+          '-movflags', '+faststart', // optimize for streaming
+          '-f', 'mp4', // set output format
+          outputFile // output file
+        ]);
+
+        console.log("executed ffmpeg");
+
+        // read the resulting video file and create a blob URL for download
+        const videoData = await ffmpegInstance.readFile(outputFile);
+        const videoBlob = new Blob([videoData.buffer], { type: 'video/mp4' });
+        const url = URL.createObjectURL(videoBlob);
+
+        console.log(outputFile);
+        console.log(videoData);
+        console.log(videoBlob);
+        // trigger download
+        const link = document.createElement('a');
+        link.href = url;
+        link.download = outputFile;
+        document.body.appendChild(link);
+        link.click();
+        document.body.removeChild(link);
+
+        console.log("downloaded video: " + outputFile);
+      }
+    }
+
+    if (!separated) {
+      console.log("starting ffmpeg exec for combined video");
+      // encode video for each morph sequence
+      const outputFile = `morph.mp4`;
       await ffmpegInstance.exec([
-        '-framerate', '24',
-        '-i', `morph${m}_frame%03d.png`,
+        '-framerate', `${numFrames}`,
+        '-i', 'frame%09d.png', // processes all frames in one go
         '-c:v', 'libx264',
         '-preset', 'slow',
         '-crf', '23',
@@ -563,11 +662,9 @@ function SVGMorph({ svgs, morphSetting, onLoadingStateChange }) {
         '-f', 'mp4',
         outputFile
       ]);
-
       console.log("executed ffmpeg");
 
-      // Read the resulting video file and create a blob URL for download
-      // const videoData = ffmpegInstance.FS('readFile', outputFile);
+      // read the resulting video file and create a blob URL for download
       const videoData = await ffmpegInstance.readFile(outputFile);
       const videoBlob = new Blob([videoData.buffer], { type: 'video/mp4' });
       const url = URL.createObjectURL(videoBlob);
@@ -575,7 +672,7 @@ function SVGMorph({ svgs, morphSetting, onLoadingStateChange }) {
       console.log(outputFile);
       console.log(videoData);
       console.log(videoBlob);
-      // Trigger download
+      // trigger download
       const link = document.createElement('a');
       link.href = url;
       link.download = outputFile;
@@ -584,16 +681,17 @@ function SVGMorph({ svgs, morphSetting, onLoadingStateChange }) {
       document.body.removeChild(link);
 
       console.log("downloaded video: " + outputFile);
-
-      // Clean up: remove frame and video files from FS
-      // for (let frameIndex = 0; frameIndex < numFrames; frameIndex++) {
-      //   const frameFile = `morph${m}_frame${String(frameIndex).padStart(3, '0')}.png`;
-      //   ffmpegInstance.FS('unlink', frameFile);
-      // }
-      // ffmpegInstance.FS('unlink', outputFile);
-      console.log("terminated ffmpeg");
     }
-    //ffmpegInstance.terminate();
+
+    // clean up
+    const files = await ffmpegInstance.listDir('/');
+    files.forEach(async (file) => {
+      if (file.name.includes("frame") && file.name.endsWith(".png")) {
+        console.log("cleaning file from ffmpeg: " + file.name);
+        await ffmpegInstance.deleteFile(file.name);
+      }
+    });
+
   };
 
   return (
