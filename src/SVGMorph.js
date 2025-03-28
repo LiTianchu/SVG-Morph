@@ -18,15 +18,23 @@ function SVGMorph({ svgs, morphSetting, onLoadingStateChange }) {
     duration: 1000,
     quality: 10,
     easing: 'linear',
-    oneToMany: 'duplicate'
+    oneToMany: 'duplicate',
+    matching: 'default'
   });
+
   const [currentSvgs, setCurrentSvgs] = useState([]);
   const ffmpegRef = useRef(null);
 
+  // path pairing setting
+  const pairByArea = true;
+
   // video export settings
   const separated = false;
-  const scaleFactor = 2; // scale factor for canvas
-  const numFrames = 30; // frames per second
+  const scaleFactor = 4; // scale factor for canvas
+  const fps = 11; // frames per second
+
+  const originalCanvasWidth = 500;
+  const originalCanvasHeight = 500;
 
   //let ffmpegRef.current = new FFmpeg();
   // use local WASM file and core from public directory
@@ -51,8 +59,10 @@ function SVGMorph({ svgs, morphSetting, onLoadingStateChange }) {
   }, []); // run once on mount to initialize ffmpeg
 
   useEffect(() => {
+    // if the current morph setting is the same as the previous one, do not reinitialize
     if (morphSetting.oneToMany === currentMorphSetting.oneToMany &&
       morphSetting.quality === currentMorphSetting.quality &&
+      morphSetting.matching === currentMorphSetting.matching &&
       currentSvgs === svgs) {
       setCurrentSvgs(svgs);
       setCurrentMorphSetting(morphSetting);
@@ -163,14 +173,14 @@ function SVGMorph({ svgs, morphSetting, onLoadingStateChange }) {
       console.log("generating interpolators for path at index " + pathIndex + " timestamp: " + (new Date().getTime() - timeElapsed));
       let selectedPathIndex = pathIndex;
       const initialPathIndex = pathIndex; // record initial path for looping back to original path
-      const pairByArea = false;
+      
       const interpolatorsToEnd = svgPathLists.map((pathList, j) => {
         // pathList is the list of paths of the j-th svg
         const path = pathList[selectedPathIndex]; // current path
 
         used[j][selectedPathIndex] = true; // mark the path as used
 
-        if (pairByArea) {
+        if (morphSetting.matching === 'closest-area') {
 
           if (j === svgPathLists.length - 1) { // if this is the last svg
             // loop back to the initial path
@@ -439,8 +449,8 @@ function SVGMorph({ svgs, morphSetting, onLoadingStateChange }) {
       const frames = Array.from({ length: numFrames }, (_, i) => i / (numFrames - 1));
       frames.forEach((t, frameIndex) => {
         // get the eased time
-        const tEased = d3Easing(t);
-
+        let tEased = d3Easing(t);
+        
         // update main paths
         svg.selectAll(':scope > path').each(function (_, i) {
           const path = d3.select(this);
@@ -473,8 +483,8 @@ function SVGMorph({ svgs, morphSetting, onLoadingStateChange }) {
   }
 
   const rescaleCanvas = (scaleFactor) => {
-    const cWidth = canvasRef.current.width * scaleFactor;
-    const cHeight = canvasRef.current.height * scaleFactor;
+    const cWidth = originalCanvasWidth * scaleFactor;
+    const cHeight = originalCanvasHeight * scaleFactor;
 
     // resize canvas based on scale factor
     canvasRef.current.width = cWidth;
@@ -486,7 +496,8 @@ function SVGMorph({ svgs, morphSetting, onLoadingStateChange }) {
     const context = canvasRef.current.getContext('2d');
 
     rescaleCanvas(scaleFactor);
-    const downloadQueue = getFrameQueue(numFrames);
+    
+    const downloadQueue = getFrameQueue(fps);
 
     // process export queue sequentially
     const processQueue = () => {
@@ -495,12 +506,15 @@ function SVGMorph({ svgs, morphSetting, onLoadingStateChange }) {
       console.log("exporting: " + `image-morph${m}-frame${frameIndex}.png`);
       context.clearRect(0, 0, canvasRef.current.width, canvasRef.current.height);
       context.drawImage(img, 0, 0);
+
       const pngDataUrl = canvasRef.current.toDataURL('image/png');
       const link = document.createElement('a');
       link.href = pngDataUrl;
       link.download = `image-morph${m}-frame${frameIndex}.png`;
       link.click();
       setTimeout(processQueue, 100);
+      URL.revokeObjectURL(pngDataUrl);
+      //console.log("exported: " + `image-morph${m}-frame${frameIndex}.png`);
     }
 
     processQueue();
@@ -532,14 +546,12 @@ function SVGMorph({ svgs, morphSetting, onLoadingStateChange }) {
     const numOfMorphs = pathsRef.current[0].interpolatorsToEnd.length;
     console.log("creating video");
 
+    const totalFrames = Math.ceil((morphSetting.duration / 1000) * fps);
+    console.log("total frames: " + totalFrames);
     // generate the sequence of frames
-    const frameQueue = getFrameQueue(numFrames);
+    const frameQueue = getFrameQueue(totalFrames);
     const canvas = canvasRef.current;
     const context = canvas.getContext('2d');
-
-    const fl = await ffmpegRef.current.listDir('/');
-    console.log("ffmpeg virtual FS files: ");
-    console.log(fl);
 
     for (const { img, m, frameIndex } of frameQueue) {
       // ensure image is loaded before drawing
@@ -556,13 +568,12 @@ function SVGMorph({ svgs, morphSetting, onLoadingStateChange }) {
       if (separated) {
         fileName = `morph${m}_frame${String(frameIndex).padStart(9, "0")}.png`;
       } else {
-        fileName = `frame${String(frameIndex + numFrames * m).padStart(9, "0")}.png`;
+        fileName = `frame${String(frameIndex + totalFrames * m).padStart(9, "0")}.png`;
       }
-
-      //saveImage(dataUrl, fileName);
 
       // write frame data to ffmpeg FS
       await ffmpegRef.current.writeFile(fileName, data);
+      URL.revokeObjectURL(dataUrl);
       console.log("write file in ffmpeg virtual FS: " + fileName);
     }
 
@@ -572,7 +583,7 @@ function SVGMorph({ svgs, morphSetting, onLoadingStateChange }) {
         console.log("executing ffmpeg for separated video of morph " + m);
         const outputFile = `morph${m}.mp4`;
         await ffmpegRef.current.exec([
-          '-framerate', `${numFrames}`,
+          '-framerate', `${fps}`,
           '-i', `morph${m}_frame%09d.png`,
           '-c:v', 'libx264',
           '-crf', '23',
@@ -600,7 +611,7 @@ function SVGMorph({ svgs, morphSetting, onLoadingStateChange }) {
       console.log("executing ffmpeg for combined video");
       const outputFile = 'morph.mp4';
       await ffmpegRef.current.exec([
-        '-framerate', `${numFrames}`,
+        '-framerate', `${fps}`,
         '-i', 'frame%09d.png', // all frames from all morphs
         '-c:v', 'libx264',
         '-crf', '23',
@@ -643,7 +654,7 @@ function SVGMorph({ svgs, morphSetting, onLoadingStateChange }) {
       }
     }
 
-    window.location.reload();
+    //window.location.reload();
   };
 
   return (
@@ -653,7 +664,7 @@ function SVGMorph({ svgs, morphSetting, onLoadingStateChange }) {
         <div style={{ display: 'flex', justifyContent: 'space-around', alignItems: 'center' }}>
           <svg ref={svgRef} width="100%" height="100%" viewBox={`0 0 ${viewBoxSize.x} ${viewBoxSize.y}`}></svg>
 
-          <canvas ref={canvasRef} width="500" height="500" style={{ display: 'none' }}></canvas>
+          <canvas ref={canvasRef} width={originalCanvasWidth} height={originalCanvasHeight} style={{ display: 'none' }}></canvas>
         </div>
         <div style={{ marginLeft: "10px", display: 'flex', justifyContent: 'space-around', alignItems: 'center' }}>
           <button onClick={handleFrameExport}>Export Frames</button>

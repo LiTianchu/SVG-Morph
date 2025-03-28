@@ -5,15 +5,17 @@ function MorphSettingPanel({ onSettingChange }) {
     const [easing, setEasing] = useState('linear');
     const [oneToMany, setOneToMany] = useState('duplicate');
     const [quality, setQuality] = useState(10);
+    const [matching, setMatching] = useState('default');
+
     const handleDurationSettingChange = (newDuration) => {
         setDuration(newDuration);
-        onSettingChange({ duration: newDuration,quality:quality, easing: easing,oneToMany:oneToMany });
+        onSettingChange({ duration: newDuration, quality: quality, easing: easing, oneToMany: oneToMany, matching: matching });
     }
 
     const handleEasingSettingChange = (newEasing) => {
         if (newEasing !== easing) {
             setEasing(newEasing);
-            onSettingChange({ duration: duration,quality:quality, easing: newEasing,oneToMany:oneToMany });
+            onSettingChange({ duration: duration, quality: quality, easing: newEasing, oneToMany: oneToMany, matching: matching });
         }
         //console.log(newEasing);
     }
@@ -21,15 +23,23 @@ function MorphSettingPanel({ onSettingChange }) {
     const handleOneToManySettingChange = (newOneToMany) => {
         if (newOneToMany !== oneToMany) {
             setOneToMany(newOneToMany);
-            onSettingChange({ duration: duration,quality:quality, easing: easing,oneToMany:newOneToMany });
+            onSettingChange({ duration: duration, quality: quality, easing: easing, oneToMany: newOneToMany, matching: matching });
         }
         //console.log(newEasing
     }
 
-       const handleQualitySettingChange = (newQuality) => {
+    const handleMatchingSettingChange = (newMatching) => {
+        if (newMatching !== matching) {
+            setMatching(newMatching);
+            onSettingChange({ duration: duration, quality: quality, easing: easing, oneToMany: oneToMany, matching: newMatching });
+        }
+        //console.log(newEasing
+    }
+
+    const handleQualitySettingChange = (newQuality) => {
         if (newQuality != quality) {
             setQuality(newQuality);
-            onSettingChange({ duration: duration,quality:newQuality, easing: easing,oneToMany:oneToMany });
+            onSettingChange({ duration: duration, quality: newQuality, easing: easing, oneToMany: oneToMany, matching: matching });
         }
         //console.log(newEasing
     }
@@ -93,7 +103,7 @@ function MorphSettingPanel({ onSettingChange }) {
                 </select>
 
             </div>
-              <div>
+            <div>
                 <label style={{
                     marginBottom: '10px',
                     fontWeight: 'bold',
@@ -105,6 +115,21 @@ function MorphSettingPanel({ onSettingChange }) {
                 <select id="one-to-many-select" value={oneToMany} onChange={(e) => handleOneToManySettingChange(e.target.value)}>
                     <option value="duplicate">Duplicate</option>
                     <option value="appear">Appear At Center</option>
+                </select>
+
+            </div>
+            <div>
+                <label style={{
+                    marginBottom: '10px',
+                    fontWeight: 'bold',
+                    fontSize: '0.5em',
+                    color: 'black',
+                    marginRight: '10px'
+                }}
+                >Matching Method</label>
+                <select id="matching-method-select" value={matching} onChange={(e) => handleMatchingSettingChange(e.target.value)}>
+                    <option value="default">Default</option>
+                    <option value="closest-area">Closest Area</option>
                 </select>
 
             </div>

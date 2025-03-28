@@ -11,7 +11,8 @@ function App() {
     duration: 1000,
     quality: 10,
     easing: 'linear',
-    oneToMany: 'duplicate'
+    oneToMany: 'duplicate',
+    matching: 'default'
   });
 
   const [loadingInfoList, setLoadingInfoList] = useState([{
