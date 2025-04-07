@@ -4,6 +4,7 @@ import SVGMorph from './SVGMorph';
 import SVGList from './SVGList';
 import MorphSettingPanel from './MorphSettingPanel';
 import LoadingInfoView from './LoadingInfoView';
+import ExportSettingPanel from './ExportSettingPanel';
 
 function App() {
   const [svgs, setSvgs] = useState([]);
@@ -15,6 +16,12 @@ function App() {
     matching: 'default'
   });
 
+  const [exportSettings, setExportSettings] = useState({
+    framerate: 24,
+    resolution: 1024,
+    fileFormat: "MP4"
+  });
+
   const [loadingInfoList, setLoadingInfoList] = useState([{
     text: 'Please upload at least 2 SVGs to start morphing.'
   }])
@@ -23,14 +30,14 @@ function App() {
 
   const handleLoadingStateChange = (isStartingNewMorph, isMorphing, loadingInfo) => {
     setIsMorphing(isMorphing);
-   
+
     setLoadingInfoList(prevLoadingInfo => {
       // if loadingInfo.text is empty, do not add to loadingInfoList
       let newLoadingInfo = [...prevLoadingInfo];
       if (loadingInfo.text !== '') {
         newLoadingInfo.push(loadingInfo);
       }
-      
+
       if (isStartingNewMorph) {
         return [{
           text: 'Please upload at least 2 SVGs to start morphing.'
@@ -47,10 +54,13 @@ function App() {
       <header className="App-header">
         <SVGList onSvgsChange={setSvgs} />
         <div id="morphing-preview" style={{ display: 'flex', justifyContent: 'center', alignItems: 'center', position: 'relative', width: "300px", height: "300px" }}>
-          <SVGMorph svgs={svgs} morphSetting={svgMorphingSettings} onLoadingStateChange={handleLoadingStateChange} />
+          <SVGMorph svgs={svgs} morphSetting={svgMorphingSettings} exportSetting={exportSettings} onLoadingStateChange={handleLoadingStateChange} />
           {/* <LoadingInfoView loadingInfoList={loadingInfoList} isMorphing={isMorphing} /> */}
         </div>
-        <MorphSettingPanel onSettingChange={setSvgMorphingSettings} />
+        <div style={{ display: 'flex' ,justifyContent: 'space-around', width: '70%', padding: '10px'}}>
+          <MorphSettingPanel onSettingChange={setSvgMorphingSettings} />
+          <ExportSettingPanel onExportSettingChange={setExportSettings} />
+        </div>
       </header>
     </div>
   );

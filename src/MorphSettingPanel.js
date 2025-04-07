@@ -39,13 +39,13 @@ function MorphSettingPanel({ onSettingChange }) {
     const handleQualitySettingChange = (newQuality) => {
         if (newQuality != quality) {
             setQuality(newQuality);
-            onSettingChange({ duration: duration, quality: newQuality, easing: easing, oneToMany: oneToMany, matching: matching });
+            onSettingChange({ duration: duration, quality: parseInt(newQuality), easing: easing, oneToMany: oneToMany, matching: matching });
         }
         //console.log(newEasing
     }
 
     return (
-        <div>
+        <div style={{ display: 'flex', alignItems:'start',alignContent:'space-between', flexDirection:'column',width: '40%'}}>
             <div>
                 <label style={{
                     marginBottom: '10px',
@@ -65,8 +65,13 @@ function MorphSettingPanel({ onSettingChange }) {
                     color: 'black',
                     marginRight: '10px'
                 }}>Animation Quality</label>
-                <input type="range" min="1" max="50" step="1" id="quality-slider" value={quality} onChange={(e) => handleQualitySettingChange(e.target.value)}></input>
-                <span style={{ marginLeft: '10px', fontSize: '0.45em', color: 'black' }}>{quality}</span>
+                 <select id="quality-select" value={quality} onChange={(e) => handleQualitySettingChange(e.target.value)}>
+                    <option value="1">Lowest</option>
+                    <option value="5">Low</option>
+                    <option value="10">Mid</option>
+                    <option value="20">High</option>
+                    <option value="30">Highest</option>
+                </select>
             </div>
             <div>
                 <label style={{

@@ -48,7 +48,7 @@ function SVGList({ onSvgsChange }) {
            <div
         style={{
             width: '85%',
-            marginBottom: '50px',
+            marginBottom: '20px',
             display: 'grid',
             gridTemplateColumns: 'repeat(auto-fit, minmax(350px, 1fr))',
             gap: '10px'

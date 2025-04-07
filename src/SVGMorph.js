@@ -4,10 +4,9 @@ import { interpolate } from 'flubber';
 import PathUtils from './PathUtils';
 import MiscUtils from './MiscUtils';
 import { FFmpeg } from '@ffmpeg/ffmpeg';
-import { toBlobURL,fetchFile } from '@ffmpeg/util';
 import PolygonUtils from './PolygonUtils';
 
-function SVGMorph({ svgs, morphSetting, onLoadingStateChange }) {
+function SVGMorph({ svgs, morphSetting, exportSetting, onLoadingStateChange }) {
   const svgRef = useRef(null);
   const canvasRef = useRef(null);
   const pathsRef = useRef([]); // stores path elements and their interpolators
@@ -21,6 +20,11 @@ function SVGMorph({ svgs, morphSetting, onLoadingStateChange }) {
     oneToMany: 'duplicate',
     matching: 'default'
   });
+  const [currentExportSetting, setCurrentExportSetting] = useState({
+    framerate: 24,
+    resolution: 1024,
+    fileFormat: "MP4"
+  });
 
   const [currentSvgs, setCurrentSvgs] = useState([]);
   const ffmpegRef = useRef(null);
@@ -29,12 +33,12 @@ function SVGMorph({ svgs, morphSetting, onLoadingStateChange }) {
   const pairByArea = true;
 
   // video export settings
-  const separated = false;
-  const scaleFactor = 4; // scale factor for canvas
-  const fps = 9; // frames per second
+  //const separated = false;
+  //const scaleFactor = 4; // scale factor for canvas
+  //const fps = 9; // frames per second
 
-  const originalCanvasWidth = 500;
-  const originalCanvasHeight = 500;
+  const originalCanvasWidth = 512;
+  const originalCanvasHeight = 512;
 
   //let ffmpegRef.current = new FFmpeg();
   // use local WASM file and core from public directory
@@ -173,7 +177,7 @@ function SVGMorph({ svgs, morphSetting, onLoadingStateChange }) {
       console.log("generating interpolators for path at index " + pathIndex + " timestamp: " + (new Date().getTime() - timeElapsed));
       let selectedPathIndex = pathIndex;
       const initialPathIndex = pathIndex; // record initial path for looping back to original path
-      
+
       const interpolatorsToEnd = svgPathLists.map((pathList, j) => {
         // pathList is the list of paths of the j-th svg
         const path = pathList[selectedPathIndex]; // current path
@@ -277,7 +281,7 @@ function SVGMorph({ svgs, morphSetting, onLoadingStateChange }) {
       //await new Promise((resolve) => setTimeout(resolve, 2000));
 
       const newViewBoxSize = computeViewBox();
-      const maxSegmentLength = newViewBoxSize.x / (morphSetting.quality * 10);
+      const maxSegmentLength = newViewBoxSize.x / (parseInt(morphSetting.quality) * 10);
       let svgPathLists = extractPath(svgs);
       svgPathLists = standardizePathNum(svgPathLists, newViewBoxSize);
 
@@ -407,6 +411,10 @@ function SVGMorph({ svgs, morphSetting, onLoadingStateChange }) {
 
   }, [initialized, morphSetting, svgs]);
 
+  useEffect(() => {
+    setCurrentExportSetting(exportSetting);
+  }, [exportSetting]);
+
   const saveImage = (dataUrl, fileName) => {
     // save to disk for testing
     const link = document.createElement('a');
@@ -431,7 +439,7 @@ function SVGMorph({ svgs, morphSetting, onLoadingStateChange }) {
       frames.forEach((t, frameIndex) => {
         // get the eased time
         let tEased = d3Easing(t);
-        
+
         // update main paths
         svg.selectAll(':scope > path').each(function (_, i) {
           const path = d3.select(this);
@@ -475,10 +483,10 @@ function SVGMorph({ svgs, morphSetting, onLoadingStateChange }) {
   const handleFrameExport = () => {
     if (!isMorphing) { return; }
     const context = canvasRef.current.getContext('2d');
-
+    const scaleFactor = currentExportSetting.resolution / originalCanvasWidth;
     rescaleCanvas(scaleFactor);
-    
-    const downloadQueue = getFrameQueue(fps);
+
+    const downloadQueue = getFrameQueue(currentExportSetting.framerate);
 
     // process export queue sequentially
     const processQueue = () => {
@@ -522,8 +530,10 @@ function SVGMorph({ svgs, morphSetting, onLoadingStateChange }) {
   const handleVideoExport = async () => {
     if (!isMorphing) { return; }
     // scale canvas for export
+    const scaleFactor = currentExportSetting.resolution / originalCanvasWidth;
     rescaleCanvas(scaleFactor);
-
+    const fps = currentExportSetting.framerate;
+    const separated = currentExportSetting.fileFormat === 'Separated MP4s' ? true : false;
     const numOfMorphs = pathsRef.current[0].interpolatorsToEnd.length;
     console.log("creating video");
 
@@ -634,8 +644,6 @@ function SVGMorph({ svgs, morphSetting, onLoadingStateChange }) {
         }
       }
     }
-
-    //window.location.reload();
   };
 
   return (
@@ -646,8 +654,7 @@ function SVGMorph({ svgs, morphSetting, onLoadingStateChange }) {
           <canvas ref={canvasRef} width={originalCanvasWidth} height={originalCanvasHeight} style={{ display: 'none' }}></canvas>
         </div>
         <div style={{ marginLeft: "10px", display: 'flex', justifyContent: 'space-around', alignItems: 'center' }}>
-          <button onClick={handleFrameExport}>Export Frames</button>
-          <button onClick={handleVideoExport}>Export MP4 Video</button>
+          <button onClick={currentExportSetting.fileFormat ==='PNGs' ? handleFrameExport : handleVideoExport}>Export</button>
         </div>
       </div>
     </div>
