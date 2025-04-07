@@ -4,21 +4,27 @@ function ExportSettingPanel({ onExportSettingChange }) {
     const [framerate, setFramerate] = useState(24);
     const [resolution, setResolution] = useState(1024);
     const [fileFormat, setFileFormat] = useState("MP4");
+    const [filename, setFilename] = useState("morphing");
 
     const handleFramerateSettingChange = (newFramerate) => {
         setFramerate(newFramerate);
-        onExportSettingChange({ resolution: resolution, framerate: newFramerate, fileFormat: fileFormat });
+        onExportSettingChange({ resolution: resolution, framerate: newFramerate, fileFormat: fileFormat, filename: filename });
     }
     
     const handleResolutionSettingChange = (newResolution) => {
         setResolution(newResolution);
-        onExportSettingChange({ resolution: newResolution, framerate: framerate, fileFormat: fileFormat });
+        onExportSettingChange({ resolution: newResolution, framerate: framerate, fileFormat: fileFormat, filename: filename });
     }
 
 
     const handleFileFormatSettingChange = (newFileFormat) => {
         setFileFormat(newFileFormat);
-        onExportSettingChange({ resolution: resolution, framerate: framerate, fileFormat: newFileFormat });
+        onExportSettingChange({ resolution: resolution, framerate: framerate, fileFormat: newFileFormat, filename: filename });
+    }
+
+    const handleFilenameSettingChange = (newFilename) => {
+        setFilename(newFilename);
+        onExportSettingChange({ resolution: resolution, framerate: framerate, fileFormat: fileFormat, filename: newFilename });
     }
 
     return (
@@ -30,7 +36,7 @@ function ExportSettingPanel({ onExportSettingChange }) {
                     fontSize: '0.5em',
                     color: 'black',
                     marginRight: '10px'
-                }}>Exporting Framerate</label>
+                }}>Export Framerate</label>
                 <input type="range" min="5" max="120" step="1" id="framerate-slider" value={framerate} onChange={(e) => handleFramerateSettingChange(e.target.value)}></input>
                 <span style={{ marginLeft: '10px', fontSize: '0.45em', color: 'black' }}>{framerate}fps</span>
             </div>
@@ -41,7 +47,7 @@ function ExportSettingPanel({ onExportSettingChange }) {
                     fontSize: '0.5em',
                     color: 'black',
                     marginRight: '10px'
-                }}>Exporting Resolution</label>
+                }}>Export Resolution</label>
                 <input type="range" min="256" max="4096" step="256" id="resolution-slider" value={resolution} onChange={(e) => handleResolutionSettingChange(e.target.value)}></input>
                 <span style={{ marginLeft: '10px', fontSize: '0.45em', color: 'black' }}>{resolution} X {resolution}</span>
             </div>
@@ -53,12 +59,22 @@ function ExportSettingPanel({ onExportSettingChange }) {
                     color: 'black',
                     marginRight: '10px'
                 }}
-                >Exporting Format</label>
+                >Export Format</label>
                 <select id="fileFormat-select" value={fileFormat} onChange={(e) => handleFileFormatSettingChange(e.target.value)}>
                     <option value="MP4">MP4</option>
                     <option value="Separated MP4s">Separated MP4s</option>
                     <option value="PNGs">PNGs</option>
                 </select>
+            </div>
+            <div>
+                <label style={{
+                    marginBottom: '10px',
+                    fontWeight: 'bold',
+                    fontSize: '0.5em',
+                    color: 'black',
+                    marginRight: '10px'
+                }}>Export Filename</label>
+                <input type="text" id="filename-input" value={filename} onChange={(e) => handleFilenameSettingChange(e.target.value)}></input>
             </div>
         </div>
     );

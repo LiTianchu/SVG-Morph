@@ -5,6 +5,7 @@ import PathUtils from './PathUtils';
 import MiscUtils from './MiscUtils';
 import { FFmpeg } from '@ffmpeg/ffmpeg';
 import PolygonUtils from './PolygonUtils';
+import JSZip from 'jszip';
 
 function SVGMorph({ svgs, morphSetting, exportSetting, onLoadingStateChange }) {
   const svgRef = useRef(null);
@@ -23,7 +24,8 @@ function SVGMorph({ svgs, morphSetting, exportSetting, onLoadingStateChange }) {
   const [currentExportSetting, setCurrentExportSetting] = useState({
     framerate: 24,
     resolution: 1024,
-    fileFormat: "MP4"
+    fileFormat: "MP4",
+    filename: "morphing"
   });
 
   const [currentSvgs, setCurrentSvgs] = useState([]);
@@ -41,7 +43,13 @@ function SVGMorph({ svgs, morphSetting, exportSetting, onLoadingStateChange }) {
       if (!ffmpegRef.current) {
         ffmpegRef.current = new FFmpeg();
 
-        await ffmpegRef.current.load({ log: true, coreURL: localCorePath, wasmURL: localWasmPath });
+        await ffmpegRef.current.load({
+          log: true,
+          coreURL: localCorePath,
+          wasmURL: localWasmPath,
+          memoryInitialSize: 512,
+          memoryMaximumSize: 32768,
+        });
         console.log("ffmpeg loaded");
       }
     };
@@ -453,7 +461,7 @@ function SVGMorph({ svgs, morphSetting, exportSetting, onLoadingStateChange }) {
     const d3Easing = MiscUtils.getD3Easing(morphSetting.easing);
     const downloadQueue = [];
     for (let m = 0; m < numOfMorphs; m++) {
-      const numFrames = frameCount; // 24 frames per second
+      const numFrames = frameCount; // frames per second
       const frames = Array.from({ length: numFrames }, (_, i) => i / (numFrames - 1));
       frames.forEach((t, frameIndex) => {
         // get the eased time
@@ -498,34 +506,50 @@ function SVGMorph({ svgs, morphSetting, exportSetting, onLoadingStateChange }) {
     canvasRef.current.width = cWidth;
     canvasRef.current.height = cHeight;
   }
-
-  const handleFrameExport = () => {
+  const handleFrameExport = async () => {
     if (!isMorphing) { return; }
     const context = canvasRef.current.getContext('2d');
     const scaleFactor = currentExportSetting.resolution / originalCanvasWidth;
     rescaleCanvas(scaleFactor);
 
+    const zip = new JSZip();
+
     const downloadQueue = getFrameQueue(currentExportSetting.framerate);
+    let processedCount = 0;
 
-    // process export queue sequentially
-    const processQueue = () => {
-      if (downloadQueue.length === 0) { return; }
-      const { img, m, frameIndex } = downloadQueue.shift();
-      console.log("exporting: " + `image-morph${m}-frame${frameIndex}.png`);
+    // process all frames and add to zip
+    for (const { img, m, frameIndex } of downloadQueue) {
+      // ensure image is loaded before drawing
+      if (!img.complete) {
+        await new Promise((resolve) => { img.onload = resolve; });
+      }
+
       context.clearRect(0, 0, canvasRef.current.width, canvasRef.current.height);
-      context.drawImage(img, 0, 0);
+      context.drawImage(img, 0, 0, canvasRef.current.width, canvasRef.current.height);
 
-      const pngDataUrl = canvasRef.current.toDataURL('image/png');
-      const link = document.createElement('a');
-      link.href = pngDataUrl;
-      link.download = `image-morph${m}-frame${frameIndex}.png`;
-      link.click();
-      setTimeout(processQueue, 100);
-      URL.revokeObjectURL(pngDataUrl);
-      //console.log("exported: " + `image-morph${m}-frame${frameIndex}.png`);
+      const pngBlob = await new Promise(resolve => {
+        canvasRef.current.toBlob(resolve, 'image/png');
+      });
+
+      const fileName = `image-morph${m}-frame${frameIndex}.png`;
+      zip.file(fileName, pngBlob);
+      console.log(`Added ${fileName} to zip`);
+
+      processedCount++;
     }
+    console.log('zipping frames...');
+    const zipBlob = await zip.generateAsync({ type: 'blob' });
+    const zipUrl = URL.createObjectURL(zipBlob);
 
-    processQueue();
+    const link = document.createElement('a');
+    link.href = zipUrl;
+    link.download = `${currentExportSetting.filename}.zip`;
+    document.body.appendChild(link);
+    link.click();
+    document.body.removeChild(link);
+    console.log('downloaded zip file');
+    // clean up
+    URL.revokeObjectURL(zipUrl);
   }
 
   //  convert data URL to Uint8Array for ffmpeg 
@@ -557,7 +581,12 @@ function SVGMorph({ svgs, morphSetting, exportSetting, onLoadingStateChange }) {
     console.log("creating video");
 
     const totalFrames = Math.ceil((morphSetting.duration / 1000) * fps);
-    console.log("total frames: " + totalFrames);
+    console.log("resolution: " + canvasRef.current.width + " x " + canvasRef.current.height);
+    console.log("frame per second: " + fps);
+    console.log("duration per morph: " + morphSetting.duration / 1000 + " seconds");
+    console.log("frames per morph: " + totalFrames);
+    console.log("total video frames: " + totalFrames * numOfMorphs);
+    console.log("total video duration: " + morphSetting.duration / 1000 * numOfMorphs + " seconds");
     // generate the sequence of frames
     const frameQueue = getFrameQueue(totalFrames);
     const canvas = canvasRef.current;
@@ -587,22 +616,24 @@ function SVGMorph({ svgs, morphSetting, exportSetting, onLoadingStateChange }) {
       console.log("write file in ffmpeg virtual FS: " + fileName);
     }
 
-    // after writing all frames, encode the video(s)
+    // after writing all frames, encode the video
     if (separated) {
       for (let m = 0; m < numOfMorphs; m++) {
         console.log("executing ffmpeg for separated video of morph " + m);
-        const outputFile = `morph${m}.mp4`;
+        const outputFile = `${currentExportSetting.filename}_${m}.mp4`;
+
         await ffmpegRef.current.exec([
           '-framerate', `${fps}`,
           '-i', `morph${m}_frame%09d.png`,
           '-c:v', 'libx264',
+          '-preset', 'fast',
           '-crf', '23',
           '-pix_fmt', 'yuv420p',
           '-movflags', '+faststart',
           '-f', 'mp4',
           outputFile
         ]);
-        console.log("executed ffmpeg for morph " + m);
+
 
         const videoData = await ffmpegRef.current.readFile(outputFile);
         const videoBlob = new Blob([videoData.buffer], { type: 'video/mp4' });
@@ -619,18 +650,20 @@ function SVGMorph({ svgs, morphSetting, exportSetting, onLoadingStateChange }) {
       }
     } else {
       console.log("executing ffmpeg for combined video");
-      const outputFile = 'morph.mp4';
+      const outputFile = `${currentExportSetting.filename}.mp4`;
+
       await ffmpegRef.current.exec([
         '-framerate', `${fps}`,
-        '-i', 'frame%09d.png', // all frames from all morphs
+        '-i', 'frame%09d.png',
         '-c:v', 'libx264',
+        '-preset', 'fast',
         '-crf', '23',
         '-pix_fmt', 'yuv420p',
         '-movflags', '+faststart',
         '-f', 'mp4',
         outputFile
       ]);
-      console.log("executed ffmpeg for combined video");
+
 
       const videoData = await ffmpegRef.current.readFile(outputFile);
       const videoBlob = new Blob([videoData.buffer], { type: 'video/mp4' });
@@ -659,21 +692,37 @@ function SVGMorph({ svgs, morphSetting, exportSetting, onLoadingStateChange }) {
           await ffmpegRef.current.deleteFile(file.name);
           console.log("cleaned file from ffmpeg virtual FS: " + file.name);
         } catch (e) {
-          console.error("Error deleting file from ffmpeg virtual FS:", file.name, e);
+          console.error("error deleting file from ffmpeg virtual FS:", file.name, e);
         }
       }
     }
   };
 
   return (
-    <div style={{ width: "100%", height: "100%", marginBottom: "2em" }}>
-      <div style={{ display: isMorphing ? 'block' : 'none' }}>
-        <div style={{ display: 'flex', justifyContent: 'space-around', alignItems: 'center' }}>
+    <div style={{ width: "100%", height: "100%", margin: "auto" }}>
+      <div style={{ display: isMorphing ? 'flex' : 'none', width: "100%", height: "100%" }}>
+        <div style={{ display: 'flex', justifyContent: 'space-around', flexDirection: 'column', alignItems: 'center' }}>
+          <h3 style={{ color: 'black', fontSize: '20px', width: '100%', textAlign: 'center' }}>Morphing Preview</h3>
           <svg ref={svgRef} width="100%" height="100%" viewBox={`0 0 ${viewBoxSize.x} ${viewBoxSize.y}`}></svg>
           <canvas ref={canvasRef} width={originalCanvasWidth} height={originalCanvasHeight} style={{ display: 'none' }}></canvas>
-        </div>
-        <div style={{ marginLeft: "10px", display: 'flex', justifyContent: 'space-around', alignItems: 'center' }}>
-          <button onClick={currentExportSetting.fileFormat === 'PNGs' ? handleFrameExport : handleVideoExport}>Export</button>
+          <div style={{ marginLeft: "10px", display: 'flex', justifyContent: 'space-around', alignItems: 'center' }}>
+            <button style={{
+              width: '350px',
+              height: '40px',
+              border: '2px solid #ccc',
+              borderRadius: '4px',
+              margin: 'auto',
+              display: 'flex',
+              fontSize: '18px',
+              justifyContent: 'center',
+              alignItems: 'center',
+              cursor: 'pointer',
+              color: 'black',
+              background: 'none',
+              padding: 0,
+              fontFamily: 'inherit',
+            }} onClick={currentExportSetting.fileFormat === 'PNGs' ? handleFrameExport : handleVideoExport}>Export</button>
+          </div>
         </div>
       </div>
     </div>

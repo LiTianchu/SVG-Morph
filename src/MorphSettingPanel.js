@@ -127,7 +127,7 @@ function MorphSettingPanel({ onSettingChange }) {
                     color: 'black',
                     marginRight: '10px'
                 }}
-                >Matching Method</label>
+                >Path Matching Method</label>
                 <select id="matching-method-select" value={matching} onChange={(e) => handleMatchingSettingChange(e.target.value)}>
                     <option value="default">Default</option>
                     <option value="closest-area">Closest Area</option>

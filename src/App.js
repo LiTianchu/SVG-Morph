@@ -3,7 +3,6 @@ import './App.css';
 import SVGMorph from './SVGMorph';
 import SVGList from './SVGList';
 import MorphSettingPanel from './MorphSettingPanel';
-import LoadingInfoView from './LoadingInfoView';
 import ExportSettingPanel from './ExportSettingPanel';
 
 function App() {
@@ -19,7 +18,8 @@ function App() {
   const [exportSettings, setExportSettings] = useState({
     framerate: 24,
     resolution: 1024,
-    fileFormat: "MP4"
+    fileFormat: "MP4",
+    filename: "morphing"
   });
 
   const [loadingInfoList, setLoadingInfoList] = useState([{
@@ -52,15 +52,14 @@ function App() {
   return (
     <div className="App">
       <header className="App-header">
-        <div style={{ display: 'flex', flexDirection: 'column', alignItems: 'center', width: '100%', height: '100%' }}>
-          <div style={{ height: '30%' ,width:'100%'}}>
+        <div style={{ display: 'flex', flexDirection: 'column',justifyContent:'space-evenly', alignItems: 'center', width: '100%',position:'relative',height:'100%' }}>
+          <div style={{ height: '30%' ,width:'100%',padding:'10px'}}>
             <SVGList onSvgsChange={setSvgs} />
           </div>
-          <div id="morphing-preview" style={{ display: 'flex', justifyContent: 'center', alignItems: 'center', position: 'relative', height: "30%" }}>
+          <div id="morphing-preview" style={{ display: 'flex', justifyContent: 'center', alignItems: 'center', aspectRatio:'1/1', width:'auto',height: "30%",minWidth:'100px',padding:'10px'}}>
             <SVGMorph svgs={svgs} morphSetting={svgMorphingSettings} exportSetting={exportSettings} onLoadingStateChange={handleLoadingStateChange} />
-            {/* <LoadingInfoView loadingInfoList={loadingInfoList} isMorphing={isMorphing} /> */}
           </div>
-          <div style={{ display: 'flex', justifyContent: 'space-around', width: '70%', height:'40%',padding: '10px' }}>
+          <div style={{ display: 'flex', justifyContent: 'space-around', width: '70%', height:'30%',padding: '10px' }}>
             <MorphSettingPanel onSettingChange={setSvgMorphingSettings} />
             <ExportSettingPanel onExportSettingChange={setExportSettings} />
           </div>

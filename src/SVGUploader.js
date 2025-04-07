@@ -10,8 +10,7 @@ function SVGUploader({ onSvgUploaded, index }) {
         if (file && file.type === 'image/svg+xml') {
             const reader = new FileReader();
             reader.onload = (e) => {
-                setSvgContent(e.target.result);
-                onSvgUploaded(e.target.result);
+                uploadSVG(e.target.result);
             };
             reader.readAsText(file);
         } else {
@@ -29,8 +28,7 @@ function SVGUploader({ onSvgUploaded, index }) {
         if (file && file.type === 'image/svg+xml') {
             const reader = new FileReader();
             reader.onload = (e) => {
-                setSvgContent(e.target.result);
-                onSvgUploaded(e.target.result);
+                uploadSVG(e.target.result);
             };
             reader.readAsText(file);
         } else {
@@ -38,51 +36,51 @@ function SVGUploader({ onSvgUploaded, index }) {
         }
     };
 
-    useEffect(() => {
-        if (svgContent && svgContainerRef.current) {
-            const parser = new DOMParser();
-            const svgDoc = parser.parseFromString(svgContent, 'image/svg+xml');
-            const svgElement = svgDoc.documentElement;
+    const uploadSVG = (svgString) => {
+        // display the uploaded SVG in the container
+        const parser = new DOMParser();
+        const svgDoc = parser.parseFromString(svgString, 'image/svg+xml');
+        const svgElement = svgDoc.documentElement;
 
-            const containerWidth = svgContainerRef.current.clientWidth;
-            const containerHeight = svgContainerRef.current.clientHeight;
-            const svgWidth = svgElement.width.baseVal.value || parseFloat(svgElement.getAttribute('width')) || svgElement.viewBox.baseVal.width;
-            const svgHeight = svgElement.height.baseVal.value || parseFloat(svgElement.getAttribute('height')) || svgElement.viewBox.baseVal.height;
+        const containerWidth = svgContainerRef.current.clientWidth;
+        const containerHeight = svgContainerRef.current.clientHeight;
+        const svgWidth = svgElement.width.baseVal.value || parseFloat(svgElement.getAttribute('width')) || svgElement.viewBox.baseVal.width;
+        const svgHeight = svgElement.height.baseVal.value || parseFloat(svgElement.getAttribute('height')) || svgElement.viewBox.baseVal.height;
 
-            const scaleX = containerWidth / svgWidth;
-            const scaleY = containerHeight / svgHeight;
-            const scale = Math.min(scaleX, scaleY, 1); // Don't scale up, only down
+        const scaleX = containerWidth / svgWidth;
+        const scaleY = containerHeight / svgHeight;
 
-            svgElement.setAttribute('width', '100%');
-            svgElement.setAttribute('height', '100%');
-            svgElement.style.transform = `scale(${scale * 0.8})`;
-            svgElement.style.transformOrigin = 'center';
+        svgElement.setAttribute('width', '100%');
+        svgElement.setAttribute('height', '100%');
+    
 
-            // set svg to white color
-            svgElement.style.fill = 'black';
+        // set svg to white color
+        svgElement.style.fill = 'black';
 
-            setSvgContent(svgElement.outerHTML);
-        }
-    }, [svgContent]);
+        setSvgContent(svgElement.outerHTML);
+
+        // callback to send the svg string data to the parent component
+        onSvgUploaded(svgString);
+    }
 
     return (
-        <div className ="svg-uploader" id={"svg-uploader" + index}>
+        <div className="svg-uploader" id={"svg-uploader" + index} style={{ display: 'flex', flexDirection: 'column', alignItems: 'center' ,width:'200px'}}>
             <button
                 style={{
-                    width: '300px',
+                    width: '100%',
                     height: '40px',
                     border: '2px solid #ccc',
                     borderRadius: '4px',
                     margin: '10px',
                     display: 'flex',
-                    fontSize: '24px',
+                    fontSize: '18px',
                     justifyContent: 'center',
                     alignItems: 'center',
                     cursor: 'pointer',
                     color: 'black',
-                    background: 'none',  // Remove default button background
-                    padding: 0,  // Remove default button padding
-                    fontFamily: 'inherit',  // Use the same font as the rest of your app
+                    background: 'none', 
+                    padding: 0, 
+                    fontFamily: 'inherit', 
                 }}
                 onClick={() => fileInputRef.current.click()}
             >
@@ -98,24 +96,24 @@ function SVGUploader({ onSvgUploaded, index }) {
             <div
                 ref={svgContainerRef}
                 style={{
-                    width: '300px',
-                    height: '200px',
+                    aspectRatio: '1 / 1',
+                    width: '100%',
                     margin: '10px',
                     border: '2px dashed #ccc',
                     borderRadius: '4px',
                     display: 'flex',
-                    fontSize: '24px',
+                    fontSize: '18px',
                     justifyContent: 'center',
                     alignItems: 'center',
-                    color: "black"
+                    color: "black",
                 }}
                 onDragOver={handleDragOver}
                 onDrop={handleDrop}
             >
                 {svgContent ? (
-                    <div dangerouslySetInnerHTML={{ __html: svgContent }} style={{ width: '100%', height: '100%' }} />
+                    <div dangerouslySetInnerHTML={{ __html: svgContent }} style={{ width:'100%', height: '100%',padding:'10%' }} />
                 ) : (
-                    <p>Or Drag and Drop Here</p>
+                    <p>Or Drag Here</p>
                 )}
             </div>
         </div>
