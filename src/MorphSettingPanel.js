@@ -17,7 +17,6 @@ function MorphSettingPanel({ onSettingChange }) {
             setEasing(newEasing);
             onSettingChange({ duration: duration, quality: quality, easing: newEasing, oneToMany: oneToMany, matching: matching });
         }
-        //console.log(newEasing);
     }
 
     const handleOneToManySettingChange = (newOneToMany) => {
@@ -25,7 +24,6 @@ function MorphSettingPanel({ onSettingChange }) {
             setOneToMany(newOneToMany);
             onSettingChange({ duration: duration, quality: quality, easing: easing, oneToMany: newOneToMany, matching: matching });
         }
-        //console.log(newEasing
     }
 
     const handleMatchingSettingChange = (newMatching) => {
@@ -33,7 +31,6 @@ function MorphSettingPanel({ onSettingChange }) {
             setMatching(newMatching);
             onSettingChange({ duration: duration, quality: quality, easing: easing, oneToMany: oneToMany, matching: newMatching });
         }
-        //console.log(newEasing
     }
 
     const handleQualitySettingChange = (newQuality) => {
@@ -41,7 +38,6 @@ function MorphSettingPanel({ onSettingChange }) {
             setQuality(newQuality);
             onSettingChange({ duration: duration, quality: parseInt(newQuality), easing: easing, oneToMany: oneToMany, matching: matching });
         }
-        //console.log(newEasing
     }
 
     return (
@@ -135,6 +131,10 @@ function MorphSettingPanel({ onSettingChange }) {
                 <select id="matching-method-select" value={matching} onChange={(e) => handleMatchingSettingChange(e.target.value)}>
                     <option value="default">Default</option>
                     <option value="closest-area">Closest Area</option>
+                    <option value="closest-distance">Closest Distance</option>
+                    <option value="furthest-area">Furthest Area</option>
+                    <option value="furthest-distance">Furthest Distance</option>
+                    <option value="random">Random</option>
                 </select>
 
             </div>

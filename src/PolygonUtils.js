@@ -70,6 +70,24 @@ const computePolygonAreaSigned = (points) => {
     return sum;
 }
 
+const getCentroid = (points) => {
+    if (!points || points.length < 3) {
+        return { x: 0, y: 0 };
+    }
+    let cx = 0;
+    let cy = 0;
+    const signedA = computePolygonAreaSigned(points) / 2;
+    points.forEach((point, i) => {
+        const [x1, y1] = point;
+        const [x2, y2] = points[(i + 1) % points.length]; // loop back at the end
+        cx += (x1 + x2) * (x1 * y2 - x2 * y1);
+        cy += (y1 + y2) * (x1 * y2 - x2 * y1);
+    });
+    cx /= (6 * signedA);
+    cy /= (6 * signedA);
+    return { x: cx, y: cy };
+}
+
 const computePolygonArea = (points) => {
     if (!points || points.length < 3) {
         return 0;
@@ -83,4 +101,9 @@ const getVector = (point1, point2) => {
     return { x: point2.x - point1.x, y: point2.y - point1.y };
 }
 
-export default { getWindingOrder, pointArrToVector, countPointPolygonIntersection, computePolygonAreaSigned, computePolygonArea, getVector }
+const getEuclideanDistance = (point1, point2) => {
+    const vector = getVector(point1, point2);
+    return Math.sqrt(vector.x ** 2 + vector.y ** 2);
+}
+
+export default { getWindingOrder, getCentroid, pointArrToVector, countPointPolygonIntersection, computePolygonAreaSigned, computePolygonArea, getVector,getEuclideanDistance }

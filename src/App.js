@@ -52,14 +52,18 @@ function App() {
   return (
     <div className="App">
       <header className="App-header">
-        <SVGList onSvgsChange={setSvgs} />
-        <div id="morphing-preview" style={{ display: 'flex', justifyContent: 'center', alignItems: 'center', position: 'relative', width: "300px", height: "300px" }}>
-          <SVGMorph svgs={svgs} morphSetting={svgMorphingSettings} exportSetting={exportSettings} onLoadingStateChange={handleLoadingStateChange} />
-          {/* <LoadingInfoView loadingInfoList={loadingInfoList} isMorphing={isMorphing} /> */}
-        </div>
-        <div style={{ display: 'flex' ,justifyContent: 'space-around', width: '70%', padding: '10px'}}>
-          <MorphSettingPanel onSettingChange={setSvgMorphingSettings} />
-          <ExportSettingPanel onExportSettingChange={setExportSettings} />
+        <div style={{ display: 'flex', flexDirection: 'column', alignItems: 'center', width: '100%', height: '100%' }}>
+          <div style={{ height: '30%' ,width:'100%'}}>
+            <SVGList onSvgsChange={setSvgs} />
+          </div>
+          <div id="morphing-preview" style={{ display: 'flex', justifyContent: 'center', alignItems: 'center', position: 'relative', height: "30%" }}>
+            <SVGMorph svgs={svgs} morphSetting={svgMorphingSettings} exportSetting={exportSettings} onLoadingStateChange={handleLoadingStateChange} />
+            {/* <LoadingInfoView loadingInfoList={loadingInfoList} isMorphing={isMorphing} /> */}
+          </div>
+          <div style={{ display: 'flex', justifyContent: 'space-around', width: '70%', height:'40%',padding: '10px' }}>
+            <MorphSettingPanel onSettingChange={setSvgMorphingSettings} />
+            <ExportSettingPanel onExportSettingChange={setExportSettings} />
+          </div>
         </div>
       </header>
     </div>

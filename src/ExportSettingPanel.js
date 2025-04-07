@@ -1,4 +1,4 @@
-import React, { useEffect, useState, useRef } from 'react';
+import React, { useState } from 'react';
 
 function ExportSettingPanel({ onExportSettingChange }) {
     const [framerate, setFramerate] = useState(24);

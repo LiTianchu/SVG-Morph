@@ -39,11 +39,6 @@
       case 'elastic-out': return d3.easeElasticOut;
       case 'elastic-in-out': return d3.easeElasticInOut;
 
-      // back (overshoots a bit)
-      case 'back-in': return d3.easeBackIn;
-      case 'back-out': return d3.easeBackOut;
-      case 'back-in-out': return d3.easeBackInOut;
-
       // default to linear easing
       default: return d3.easeLinear;
     }

@@ -29,20 +29,10 @@ function SVGMorph({ svgs, morphSetting, exportSetting, onLoadingStateChange }) {
   const [currentSvgs, setCurrentSvgs] = useState([]);
   const ffmpegRef = useRef(null);
 
-  // path pairing setting
-  const pairByArea = true;
-
-  // video export settings
-  //const separated = false;
-  //const scaleFactor = 4; // scale factor for canvas
-  //const fps = 9; // frames per second
-
   const originalCanvasWidth = 512;
   const originalCanvasHeight = 512;
 
-  //let ffmpegRef.current = new FFmpeg();
-  // use local WASM file and core from public directory
-  //const baseURL = 'https://unpkg.com/@ffmpeg/core@0.12.6/dist/umd'
+
   const localWasmPath = '/ffmpeg-core.wasm';
   const localCorePath = '/ffmpeg-core.js';
 
@@ -51,10 +41,6 @@ function SVGMorph({ svgs, morphSetting, exportSetting, onLoadingStateChange }) {
       if (!ffmpegRef.current) {
         ffmpegRef.current = new FFmpeg();
 
-        // await ffmpegRef.current.load({
-        //   coreURL: await toBlobURL(`${baseURL}/ffmpeg-core.js`, 'text/javascript'),
-        //   wasmURL: await toBlobURL(`${baseURL}/ffmpeg-core.wasm`, 'application/wasm'),
-        // });
         await ffmpegRef.current.load({ log: true, coreURL: localCorePath, wasmURL: localWasmPath });
         console.log("ffmpeg loaded");
       }
@@ -185,38 +171,71 @@ function SVGMorph({ svgs, morphSetting, exportSetting, onLoadingStateChange }) {
         used[j][selectedPathIndex] = true; // mark the path as used
         console.log(used);
 
-        if (morphSetting.matching === 'closest-area') {
+        if (j === svgPathLists.length - 1) { // if this is the last svg
+          // loop back to the initial path
+          selectedPathIndex = initialPathIndex; // set the next pair path index
+        } else if (morphSetting.matching === 'random') {
+          // choose a random path from the next svg
+          const pathNum = pathList.length;
+          do {
+            selectedPathIndex = Math.floor(Math.random() * pathNum);
+          } while (used[j + 1][selectedPathIndex]); // if this path is marked as used, choose another one
+        } else if (morphSetting.matching != 'default') {
+          // choose the next pair path based on the matching condition
+          const nextSvgPathList = svgPathLists[(j + 1) % svgPathLists.length];
 
-          if (j === svgPathLists.length - 1) { // if this is the last svg
-            // loop back to the initial path
-            selectedPathIndex = initialPathIndex; // set the next pair path index
-          } else { // choose the next pair path based on area difference
+          let smallestAbsAreaDiff = Number.MAX_VALUE;
+          let largestAbsAreaDiff = 0;
 
-            // find the suitable pair path index by 
-            const nextSvgPathList = svgPathLists[(j + 1) % svgPathLists.length];
-            let smallestAbsAreaDiff = Number.MAX_VALUE;
-            let nextPairPathIndex = -1;
+          let smallestDistance = Number.MAX_VALUE;
+          let largestDistance = 0;
 
-            nextSvgPathList.forEach((nextSvgPath, nextPIndex) => {
-              if (!used[(j + 1)][nextPIndex]) { // if this path is not marked as used
-                // compute the area difference between the two paths
-                const pathArea = PolygonUtils.computePolygonArea(path.mainPathPoints);
-                const nextPathArea = PolygonUtils.computePolygonArea(nextSvgPath.mainPathPoints);
-                const absAreaDiff = Math.abs(pathArea - nextPathArea);
+          let nextPairPathIndex = -1;
+
+          nextSvgPathList.forEach((nextSvgPath, nextPIndex) => {
+            if (used[(j + 1)][nextPIndex]) { return; }// if this path is marked as used, skip it
+            if (morphSetting.matching.includes('area')) {
+              // compute the area difference between the two paths
+              const pathArea = PolygonUtils.computePolygonArea(path.mainPathPoints);
+              const nextPathArea = PolygonUtils.computePolygonArea(nextSvgPath.mainPathPoints);
+              const absAreaDiff = Math.abs(pathArea - nextPathArea);
+              if (morphSetting.matching === 'closest-area') {
                 if (absAreaDiff < smallestAbsAreaDiff) {
                   smallestAbsAreaDiff = absAreaDiff;
                   nextPairPathIndex = nextPIndex;
                 }
+              } else if (morphSetting.matching === 'furthest-area') {
+                if (absAreaDiff > largestAbsAreaDiff) {
+                  largestAbsAreaDiff = absAreaDiff;
+                  nextPairPathIndex = nextPIndex;
+                }
               }
-            });
+            } else if (morphSetting.matching.includes('distance')) {
+              // compute the distance between the two paths
+              const pathCentroid = PolygonUtils.getCentroid(path.mainPathPoints);
+              const nextPathCentroid = PolygonUtils.getCentroid(nextSvgPath.mainPathPoints);
+              const dist = PolygonUtils.getEuclideanDistance(pathCentroid, nextPathCentroid);
 
-            if (nextPairPathIndex === -1) {
-              console.error("No suitable pair path found for svg " + j + " path at index " + pathIndex);
-              return;
+              if (morphSetting.matching === 'closest-distance') {
+                if (dist < smallestDistance) {
+                  smallestDistance = dist;
+                  nextPairPathIndex = nextPIndex;
+                }
+              } else if (morphSetting.matching === 'furthest-distance') {
+                if (dist > largestDistance) {
+                  largestDistance = dist;
+                  nextPairPathIndex = nextPIndex;
+                }
+              }
             }
+          });
 
-            selectedPathIndex = nextPairPathIndex; // set the next pair path index
+          if (nextPairPathIndex === -1) {
+            console.error("No suitable pair path found for svg " + j + " path at index " + pathIndex);
+            return;
           }
+
+          selectedPathIndex = nextPairPathIndex; // set the next pair path index
         }
 
 
@@ -654,7 +673,7 @@ function SVGMorph({ svgs, morphSetting, exportSetting, onLoadingStateChange }) {
           <canvas ref={canvasRef} width={originalCanvasWidth} height={originalCanvasHeight} style={{ display: 'none' }}></canvas>
         </div>
         <div style={{ marginLeft: "10px", display: 'flex', justifyContent: 'space-around', alignItems: 'center' }}>
-          <button onClick={currentExportSetting.fileFormat ==='PNGs' ? handleFrameExport : handleVideoExport}>Export</button>
+          <button onClick={currentExportSetting.fileFormat === 'PNGs' ? handleFrameExport : handleVideoExport}>Export</button>
         </div>
       </div>
     </div>
