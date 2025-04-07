@@ -31,7 +31,7 @@ function SVGMorph({ svgs, morphSetting, onLoadingStateChange }) {
   // video export settings
   const separated = false;
   const scaleFactor = 4; // scale factor for canvas
-  const fps = 11; // frames per second
+  const fps = 9; // frames per second
 
   const originalCanvasWidth = 500;
   const originalCanvasHeight = 500;
@@ -179,6 +179,7 @@ function SVGMorph({ svgs, morphSetting, onLoadingStateChange }) {
         const path = pathList[selectedPathIndex]; // current path
 
         used[j][selectedPathIndex] = true; // mark the path as used
+        console.log(used);
 
         if (morphSetting.matching === 'closest-area') {
 
@@ -223,53 +224,36 @@ function SVGMorph({ svgs, morphSetting, onLoadingStateChange }) {
         const fromFillColor = path.fillColor;
         const toFillColor = nextPairPath.fillColor;
 
-        //const maskPaths = Math.max(path.maskPaths.length, nextPairPath.maskPaths.length);
-        //console.log("mask paths: " + maxMaskPathsNum);
-        //console.log("from main path: " + path.mainPath);
-        //console.log("to main path: " + nextPairPath.mainPath);
-        //console.log("mask paths: " + path.maskPaths);
-        //console.log("next pair mask paths: " + nextPairPath.maskPaths);
-
         // fill in the missing mask paths for both from and to paths
         const maxMaskPathsNum = Math.max(...svgPathLists.flat().map(path => path.maskPaths.length));
         for (let k = 0; k < maxMaskPathsNum; k++) {
           if (path.maskPaths[k] == null) {
             // create a empty mask path
-            //console.log("from: empty mask path");
             const center = PathUtils.computePathCenter(path.mainPath);
             // add an empty path at the certer
             fromPathList.push(`M${center.x},${center.y} Z`);
 
           } else {
-            //console.log("from: " + path.maskPaths[k]);
             fromPathList.push(path.maskPaths[k]);
           }
 
           if (nextPairPath.maskPaths[k] == null) {
             // create a empty mask path
-            //console.log("to: empty mask path");
             const center = PathUtils.computePathCenter(nextPairPath.mainPath);
             // add an empty path at the certer
             toPathList.push(`M${center.x},${center.y} Z`);
           }
           else {
-            //console.log("to: " + nextPairPath.maskPaths[k]);
             toPathList.push(nextPairPath.maskPaths[k]);
           }
 
         }
 
-        //console.log("from path list: " + fromPathList);
-        //console.log("to path list: " + toPathList);
         let interpolators = { mainPathInterpolator: null, maskPathInterpolators: [], fillColorInterpolator: null, stokeColorInterpolator: null, strokeWidthInterpolator: null, strokeOpacityInterpolator: null };
-        //console.log("max segment length: " + sizeX / 100);
-        //console.log("generating interpolators for main path at index " + pathIndex + " timestamp: " + (new Date().getTime() - timeElapsed));
 
         // generate interpolators for main path
         const mainInterpolator = interpolate(fromPathList[0], toPathList[0], { maxSegmentLength: maxSegmentLength });
         interpolators.mainPathInterpolator = mainInterpolator;
-
-        //console.log("generating interpolators for mask path at index " + pathIndex + " timestamp: " + (new Date().getTime() - timeElapsed));
 
         // generate interpolators for mask paths
         for (let k = 1; k < fromPathList.length; k++) {
@@ -278,9 +262,6 @@ function SVGMorph({ svgs, morphSetting, onLoadingStateChange }) {
         }
 
         interpolators.fillColorInterpolator = d3.interpolateRgb(fromFillColor, toFillColor);
-        //console.log("from stroke: " + fromStroke.strokeColor + " , to stroke: " + toStroke.strokeColor);
-        //console.log("from stroke width: " + fromStroke.strokeWidth + " , to stroke width: " + toStroke.strokeWidth);
-        //console.log("from stroke opacity: " + fromStroke.strokeOpacity + " , to stroke opacity: " + toStroke.strokeOpacity);
         interpolators.strokeOpacityInterpolator = d3.interpolate(fromStroke.strokeOpacity, toStroke.strokeOpacity);
         interpolators.stokeColorInterpolator = d3.interpolateRgb(fromStroke.strokeColor, toStroke.strokeColor);
         interpolators.strokeWidthInterpolator = d3.interpolate(fromStroke.strokeWidth, toStroke.strokeWidth);
@@ -302,6 +283,7 @@ function SVGMorph({ svgs, morphSetting, onLoadingStateChange }) {
 
       const maxMaskPathsNum = Math.max(...svgPathLists.flat().map(path => path.maskPaths.length));
       console.log(svgPathLists);
+      const used = Array.from({ length: svgs.length }, () => Array.from({ length: svgPathLists[0].length }, () => false)); // table to mark used paths used[j][i] = true if the i-th path of the j-th svg is used
       // iterate over each path of the first svg to generate the set of interpolators
       svgPathLists[0].forEach((mainMaskPair, i) => {
         const firstMainPath = mainMaskPair.mainPath;
@@ -319,7 +301,6 @@ function SVGMorph({ svgs, morphSetting, onLoadingStateChange }) {
             firstMainPathMasks.push(mainMaskPair.maskPaths[k]);
           }
         }
-        const used = Array.from({ length: svgs.length }, () => Array.from({ length: svgPathLists[0].length }, () => false)); // table to mark used paths used[j][i] = true if the i-th path of the j-th svg is used
         const interpolatorsToEnd = getInterpolatorTillEnd(svgPathLists, i, maxSegmentLength, used);
 
         // generate initial elements for morphing
@@ -660,10 +641,8 @@ function SVGMorph({ svgs, morphSetting, onLoadingStateChange }) {
   return (
     <div style={{ width: "100%", height: "100%", marginBottom: "2em" }}>
       <div style={{ display: isMorphing ? 'block' : 'none' }}>
-
         <div style={{ display: 'flex', justifyContent: 'space-around', alignItems: 'center' }}>
           <svg ref={svgRef} width="100%" height="100%" viewBox={`0 0 ${viewBoxSize.x} ${viewBoxSize.y}`}></svg>
-
           <canvas ref={canvasRef} width={originalCanvasWidth} height={originalCanvasHeight} style={{ display: 'none' }}></canvas>
         </div>
         <div style={{ marginLeft: "10px", display: 'flex', justifyContent: 'space-around', alignItems: 'center' }}>

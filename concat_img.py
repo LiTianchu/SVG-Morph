@@ -41,7 +41,7 @@ image_paths = sorted(
 )
 
 # Use the first 32 images if available (adjust as needed)
-image_array = image_paths[:32]
+image_array = image_paths[:24]
 # Specify the grid shape (e.g. 4 rows x 8 columns)
-image = concat_images(image_array, (1000, 1000), (4, 8))
+image = concat_images(image_array, (1000, 1000))
 image.save('image.jpg', 'JPEG')
