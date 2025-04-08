@@ -27,7 +27,6 @@ const computePathCenter = (path) => {
 };
 
 const getPathPoints = (path) => {
-    //let timeElapsed = new Date().getTime();
     // get the bounding box of the path
     const pathString = path;
 
@@ -48,28 +47,20 @@ const getPathPoints = (path) => {
     }
 
     document.body.removeChild(tempSvg);
-    //console.log("get path point took " + (new Date().getTime() - timeElapsed) + "ms");
     return points;
 }
 
 const isPathHole = (selectedPoint, pathPoints, otherPathPoints, outerContourPoints, fillrule) => {
-    //const pathPoints = getPathPoints(path);
-    //const outerContourPoints = getPathPoints(outerContour);
     const outerContourWindingOrder = PolygonUtils.getWindingOrder(outerContourPoints);
 
-    //console.log("Path points: " + pathPoints);
-    //console.log("selected point: " + selectedPoint);
-    //console.log("filtered paths: " + filteredPaths);
     const numOfIntersections = PolygonUtils.countPointPolygonIntersection(selectedPoint, otherPathPoints);
 
-    //console.log("isPathHole took " + (new Date().getTime() - timeElapsed) + "ms");
     if (fillrule === 'evenodd') {
         // use point in polygon algorithm to determine if the path is a hole
         // if the point is inside an odd number of polygons except itself, it is a hole
         return numOfIntersections % 2 === 1;
     } else { // non-zero fill rule
         const windingOrder = PolygonUtils.getWindingOrder(pathPoints);
-        //console.log("winding order: " + windingOrder + " \n" + "path: " + path);
         // if the point is inside an odd number of polygons except itself plus the outer coutour has different winding order, it is a hole
         return windingOrder !== outerContourWindingOrder && numOfIntersections % 2 === 1;
     }
@@ -123,7 +114,6 @@ const isPathStringValid = (path) => {
 }
 
 const cleanPath = (path) => {
-    //let timeElapsed = new Date().getTime();
     // trim spaces
     path = path.trim();
 
@@ -154,11 +144,6 @@ const cleanPath = (path) => {
             const startingYCoordEndIndex = getNextElementEndIndex(subPath, startingXCoordEndIndex);
             prevX = parseFloat(subPath.slice(0, startingXCoordEndIndex));
             prevY = parseFloat(subPath.slice(startingXCoordEndIndex, startingYCoordEndIndex));
-            //console.log("subpath: " + subPath);
-            //console.log(subPath.slice(startingXCoordEndIndex, startingYCoordEndIndex));
-            //console.log("startingXCoordEndIndex: " + startingXCoordEndIndex);
-            //console.log("startingYCoordEndIndex: " + startingYCoordEndIndex);
-            //console.log("starting point: " + prevX + "," + prevY);
             absoluteCoordPath += "M" + subPath;
             return;
         }
@@ -180,15 +165,11 @@ const cleanPath = (path) => {
 
             newPath = newXCoord + (newYCoord < 0 ? "" : " ") + newYCoord + newPath;
             absoluteCoordPath += "M" + newPath;
-            //console.log("command is m therefore converted new absolute path: \n" + "M" + newPath);
         } else {
             absoluteCoordPath += "M" + subPath;
-            //console.log("command is M therefore old subpath: \n" + "M" + subPath);
-
         }
     });
-    //console.log(absoluteCoordPath);
-    //console.log("cleanPath took " + (new Date().getTime() - timeElapsed) + "ms");
+
     return absoluteCoordPath;
 }
 
@@ -238,8 +219,6 @@ const getStrokeDataFromSvgElement = (pathElement) => {
     let data = { strokeColor: strokeColor, strokeWidth: strokeWidth, strokeOpacity: strokeOpacity };
 
     if (style == null) {
-        //console.log(data);
-        // return invisible stroke data if null
         return data;
     }
 
@@ -262,8 +241,6 @@ const getStrokeDataFromSvgElement = (pathElement) => {
         }
     })
 
-    //console.log(data);
-    // return inivisble stroke data if null
     return data;
 }
 
@@ -279,11 +256,9 @@ const extractPaths = (svgString) => {
     const svgDoc = parser.parseFromString(svgString, 'image/svg+xml');
     const parentFillColor = getColorFromSvgElement(svgDoc.documentElement);
     const parentStrokeData = getStrokeDataFromSvgElement(svgDoc.documentElement);
-    //let pathList = Array.from(svgDoc.querySelectorAll(':scope > path')); // selects only path in the direct children
     let pathList = Array.from(svgDoc.querySelectorAll(':scope > path, :scope > rect, :scope > circle, :scope > ellipse, :scope > line, :scope > polyline, :scope > polygon')); // selects only path in the direct children
     let extractedPaths = [];
 
-    //console.log("pathList: " + pathList);
     //convert non path elements to path elements
     pathList.forEach((pathElement, i) => {
         let currentPathMasks = [];
@@ -294,8 +269,6 @@ const extractPaths = (svgString) => {
         }
 
         let isStrokeColorDefined = true;
-        //let hasStrokeWidth = true;
-        //let hasStrokeOpacity = true;
 
         if (strokeData.strokeColor == null) {
             strokeData.strokeColor = parentStrokeData.strokeColor;
@@ -305,21 +278,18 @@ const extractPaths = (svgString) => {
                 strokeData.strokeColor = "black";
             }
         }
-        //console.log("stroke color: " + strokeData.strokeColor);
         if (strokeData.strokeWidth == null) {
             strokeData.strokeWidth = parentStrokeData.strokeWidth;
             if (strokeData.strokeWidth == null) {
                 strokeData.strokeWidth = isStrokeColorDefined ? 1: 0; // default stroke width is 1 if stroke color is defined
             }
         }
-        //console.log("stroke width: " + strokeData.strokeWidth);
         if (strokeData.strokeOpacity == null) {
             strokeData.strokeOpacity = parentStrokeData.strokeOpacity;
             if (strokeData.strokeOpacity == null) {
                 strokeData.strokeOpacity = isStrokeColorDefined ? 1 : 0; // default stroke opacity is 1 if stroke color is defined
             }
         }
-        //console.log("stroke opacity: " + strokeData.strokeOpacity);
         const maskAttr = pathElement.getAttribute('mask');
 
         if (pathElement.tagName !== 'path') {
@@ -349,12 +319,9 @@ const extractPaths = (svgString) => {
         }
 
         const path = pathElement.getAttribute('d')
-        //console.log("color: " + color);
-
 
         // check if path has a mask
         const maskId = maskAttr != null ? maskAttr.slice(5, -1) : null;
-        //console.log("maskid is: " + maskId);
 
         if (maskId != null) {
             const maskElement = svgDoc.getElementById(maskId);
@@ -401,14 +368,10 @@ const extractPaths = (svgString) => {
             });
         }
 
-        //console.log("mask paths: " + currentPathMasks);
-
-        //const cleanedPath = cleanPath(path);
         const convertedAbsolutePath = cleanPath(path);
         if(!isPathStringValid(convertedAbsolutePath)){
             return;
         }
-
 
         // if path contains subpaths, split them into separate paths
         if (convertedAbsolutePath.includes('M')) {
@@ -424,7 +387,6 @@ const extractPaths = (svgString) => {
                 let pathPoints = getPathPoints(subPath);
                 let selectedPoint = pathPoints[0];
                 if (selectedPoint == null || selectedPoint == undefined) {
-                    //console.log("selected point is null, choosing the first point of the path");
                     const commandIndex = getNextElementEndIndex(subPath, 0); // M
                     const xCoordEndIndex = getNextElementEndIndex(subPath, commandIndex);
                     const yCoordEndIndex = getNextElementEndIndex(subPath, xCoordEndIndex);
@@ -437,14 +399,12 @@ const extractPaths = (svgString) => {
                     subPathData.push({ points: pathPoints, subPath: subPath, firstPoint: selectedPoint });
                 }
 
-                //console.log(selectedPoint);
                 const filteredPathData = subPathData.filter(p => p.subPath != subPath);
 
                 const numOfIntersections = PolygonUtils.countPointPolygonIntersection(selectedPoint, filteredPathData.map(p => p.points));
                 if (numOfIntersections % 2 === 0) { // if the point is outside an even number of polygon line segments, it is the outer contour
                     outerContour = subPath;
                     outerContourPoints = subPathData[i].points;
-                    //console.log("found outer contour: " + outerContour);
                     return;
                 }
             });
@@ -479,7 +439,6 @@ const extractPaths = (svgString) => {
 
     });
 
-    //console.log(extractedPaths);
     return extractedPaths;
 };
 

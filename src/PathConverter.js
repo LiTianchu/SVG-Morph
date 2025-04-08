@@ -3,7 +3,7 @@ const rectToPath = (rect) => {
     let y = parseFloat(rect.getAttribute("y")) || 0;
     let w = parseFloat(rect.getAttribute("width"));
     let h = parseFloat(rect.getAttribute("height"));
-    let rx = parseFloat(rect.getAttribute("rx")) || 0; // rounded corners (optional)
+    let rx = parseFloat(rect.getAttribute("rx")) || 0; // rounded corners
     let ry = parseFloat(rect.getAttribute("ry")) || 0;
 
     if (rx > 0 || ry > 0) {
@@ -62,8 +62,8 @@ const polylineToPath = (polyline) => {
 }
 
 const polygonToPath = (polygon) => {
-    let pathData = polylineToPath(polygon); // Uses polyline logic
-    return pathData + " Z"; // Close the shape
+    let pathData = polylineToPath(polygon); 
+    return pathData + " Z"; 
 }
 
 export default { rectToPath, circleToPath, ellipseToPath, lineToPath, polylineToPath, polygonToPath };

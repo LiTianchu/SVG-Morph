@@ -80,7 +80,6 @@ function SVGMorph({ svgs, morphSetting, exportSetting, onLoadingStateChange }) {
     let timeElapsed = new Date().getTime();
 
     if (!svgs || svgs.length < 2) {
-      //console.log("Num of SVGs less than 2, abort morphing");
       return;
     }
 
@@ -126,6 +125,7 @@ function SVGMorph({ svgs, morphSetting, exportSetting, onLoadingStateChange }) {
     const extractPath = () => {
       onLoadingStateChange(false, false, { text: "Extracting paths..." });
       console.log("extracting paths timestamp: " + (new Date().getTime() - timeElapsed));
+
       // extract path to get the list of paths of each svg
       const svgPathLists = svgs.map(PathUtils.extractPaths);
       return svgPathLists
@@ -137,8 +137,6 @@ function SVGMorph({ svgs, morphSetting, exportSetting, onLoadingStateChange }) {
       console.log("standardizing number of paths timestamp: " + (new Date().getTime() - timeElapsed));
       const maxPaths = Math.max(...svgPathLists.map(pathList => pathList.length));
 
-      //console.log("max paths: " + maxPaths);
-      //console.log("max mask paths: " + maxMaskPathsNum);
       for (let i = 0; i < svgPathLists.length; i++) {
         const initialPathNum = svgPathLists[i].length;
         for (let j = initialPathNum; j < maxPaths; j++) {
@@ -305,7 +303,6 @@ function SVGMorph({ svgs, morphSetting, exportSetting, onLoadingStateChange }) {
     const setUpInterpolation = () => {
       onLoadingStateChange(false, false, { text: "Starting to set up interpolation..." });
       console.log("setting up interpolation timestamp: " + (new Date().getTime() - timeElapsed));
-      //await new Promise((resolve) => setTimeout(resolve, 2000));
 
       const newViewBoxSize = computeViewBox();
       const maxSegmentLength = newViewBoxSize.x / (parseInt(morphSetting.quality) * 10);
@@ -320,8 +317,6 @@ function SVGMorph({ svgs, morphSetting, exportSetting, onLoadingStateChange }) {
         const firstMainPath = mainMaskPair.mainPath;
         const firstFillColor = mainMaskPair.fillColor;
         const firstStroke = mainMaskPair.strokeData;
-        //console.log("first main path: ");
-        //console.log(firstStroke);
 
         let firstMainPathMasks = [];
         for (let k = 0; k < maxMaskPathsNum; k++) {
@@ -359,15 +354,12 @@ function SVGMorph({ svgs, morphSetting, exportSetting, onLoadingStateChange }) {
           .attr('fill-rule', 'nonzero')
           .attr('mask', `url(#mask-${i})`); // link to masks
 
-        //console.log("initial path element: " + pathElement.node());
-
         // push the starting path element and the series of interpolators to the end
         pathsRef.current.push({ pathElement, maskTagElement, interpolatorsToEnd });
       });
 
       onLoadingStateChange(false, false, { text: "Finished setting up interpolation, triggering animation..." });
       console.log("finished setting up interpolation timestamp: " + (new Date().getTime() - timeElapsed));
-      //await new Promise((resolve) => setTimeout(resolve, 2000));
       console.log("intiialized before " + initialized);
       setInitialized(true);
       console.log("intiialized after " + initialized);
@@ -394,7 +386,6 @@ function SVGMorph({ svgs, morphSetting, exportSetting, onLoadingStateChange }) {
       onLoadingStateChange(false, true, { text: "" });
     }
 
-    //console.log("triggering animation");
     const svg = d3.select(svgRef.current);
     svg.selectAll('*').interrupt();
 
@@ -425,7 +416,6 @@ function SVGMorph({ svgs, morphSetting, exportSetting, onLoadingStateChange }) {
     }
 
     pathsRef.current.forEach((pathAndInterpolators, i) => {
-      //console.log(pathAndInterpolators);
       const pathElement = pathAndInterpolators.pathElement;
       const maskTagElement = pathAndInterpolators.maskTagElement;
       const interpolatorsToEnd = pathAndInterpolators.interpolatorsToEnd;
@@ -441,16 +431,6 @@ function SVGMorph({ svgs, morphSetting, exportSetting, onLoadingStateChange }) {
   useEffect(() => {
     setCurrentExportSetting(exportSetting);
   }, [exportSetting]);
-
-  const saveImage = (dataUrl, fileName) => {
-    // save to disk for testing
-    const link = document.createElement('a');
-    link.href = dataUrl;
-    link.download = fileName;
-    document.body.appendChild(link);
-    link.click();
-    document.body.removeChild(link);
-  }
 
   const getFrameQueue = (frameCount) => {
     const svg = d3.select(svgRef.current);
@@ -563,11 +543,6 @@ function SVGMorph({ svgs, morphSetting, exportSetting, onLoadingStateChange }) {
     }
     return bytes;
   };
-
-  const sleep = (time) => {
-    return new Promise((resolve) => setTimeout(resolve, time));
-  }
-
 
   //  button handler to export video using ffmpeg
   const handleVideoExport = async () => {

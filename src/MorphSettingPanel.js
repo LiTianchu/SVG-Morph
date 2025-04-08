@@ -1,4 +1,4 @@
-import React, { useEffect, useState, useRef } from 'react';
+import React, { useState } from 'react';
 
 function MorphSettingPanel({ onSettingChange }) {
     const [duration, setDuration] = useState(1000);

@@ -9,7 +9,6 @@ function SVGList({ onSvgsChange }) {
         setSvgs(prevSvgs => {
             const newSvgs = [...prevSvgs];
             newSvgs[index] = svg;
-            //onSvgsChange(newSvgs);
             return newSvgs;
         });
 
@@ -24,7 +23,6 @@ function SVGList({ onSvgsChange }) {
         setUploaders(uploaders.filter(uploader => uploader.id !== id));
         setSvgs(prevSvgs => {
             const newSvgs = prevSvgs.filter((_, i) => i !== index);
-            //onSvgsChange(newSvgs);
             return newSvgs;
         });
     }

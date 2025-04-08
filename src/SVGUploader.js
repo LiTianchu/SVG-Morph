@@ -42,17 +42,8 @@ function SVGUploader({ onSvgUploaded, index }) {
         const svgDoc = parser.parseFromString(svgString, 'image/svg+xml');
         const svgElement = svgDoc.documentElement;
 
-        const containerWidth = svgContainerRef.current.clientWidth;
-        const containerHeight = svgContainerRef.current.clientHeight;
-        const svgWidth = svgElement.width.baseVal.value || parseFloat(svgElement.getAttribute('width')) || svgElement.viewBox.baseVal.width;
-        const svgHeight = svgElement.height.baseVal.value || parseFloat(svgElement.getAttribute('height')) || svgElement.viewBox.baseVal.height;
-
-        const scaleX = containerWidth / svgWidth;
-        const scaleY = containerHeight / svgHeight;
-
         svgElement.setAttribute('width', '100%');
         svgElement.setAttribute('height', '100%');
-    
 
         // set svg to white color
         svgElement.style.fill = 'black';
