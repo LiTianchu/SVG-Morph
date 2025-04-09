@@ -37,7 +37,7 @@ function ExportSettingPanel({ onExportSettingChange }) {
                     color: 'black',
                     marginRight: '10px'
                 }}>Export Framerate</label>
-                <input type="range" min="5" max="120" step="1" id="framerate-slider" value={framerate} onChange={(e) => handleFramerateSettingChange(e.target.value)}></input>
+                <input type="range" min="5" max="60" step="1" id="framerate-slider" value={framerate} onChange={(e) => handleFramerateSettingChange(e.target.value)}></input>
                 <span style={{ marginLeft: '10px', fontSize: '0.45em', color: 'black' }}>{framerate}fps</span>
             </div>
             <div>

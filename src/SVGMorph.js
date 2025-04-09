@@ -758,6 +758,7 @@ const handleVideoExport = async () => {
 
 // helper function to process batch frames
 const processBatchFrames = async (batch, context, morphIdx, totalFrames = null) => {
+  console.log(batch);
   for (const { img, frameIndex } of batch) {
     // ensure image is loaded
     if (!img.complete) {
