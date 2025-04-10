@@ -486,6 +486,7 @@ function SVGMorph({ svgs, morphSetting, exportSetting, onLoadingStateChange }) {
     canvasRef.current.width = cWidth;
     canvasRef.current.height = cHeight;
   }
+  
   const handleFrameExport = async () => {
     if (!isMorphing) { return; }
     const context = canvasRef.current.getContext('2d');
@@ -544,101 +545,194 @@ function SVGMorph({ svgs, morphSetting, exportSetting, onLoadingStateChange }) {
     return bytes;
   };
 
- //  button handler to export video using ffmpeg with batching
-const handleVideoExport = async () => {
-  if (!isMorphing) { return; }
-  
-  // get the settings for export
-  const scaleFactor = currentExportSetting.resolution / originalCanvasWidth;
-  rescaleCanvas(scaleFactor); // scale canvas
-  const fps = currentExportSetting.framerate;
-  const separated = currentExportSetting.fileFormat === 'Separated MP4s';
-  const numOfMorphs = pathsRef.current[0].interpolatorsToEnd.length;
-  
-  // calculate frames
-  const totalFrames = Math.ceil((morphSetting.duration / 1000) * fps);
-  console.log(`Resolution: ${canvasRef.current.width}x${canvasRef.current.height}`);
-  console.log(`FPS: ${fps}, Frames per morph: ${totalFrames}`);
-  console.log(`Total frames: ${totalFrames * numOfMorphs}`);
-  
-  // generate the sequence of frames
-  const frameQueue = getFrameQueue(totalFrames);
-  const canvas = canvasRef.current;
-  const context = canvas.getContext('2d');
-  
-  // determine batch size based on resolution, smaller batches for higher resolutions
-  // decreases batch size as resolution increases
-  const BATCH_SIZE = Math.max(10, Math.min(30, Math.floor(2000000 / (canvas.width * canvas.height))));
-  console.log(`Using batch size of ${BATCH_SIZE} frames per batch`);
-  
-  // array to store temporary video segment filenames
-  const tempSegmentFiles = [];
-  
-  if (separated) {
-    for (let m = 0; m < numOfMorphs; m++) {
-      const segmentFiles = [];
-      
-      // calculate frames for this morph
-      const morphFrames = frameQueue.filter(item => item.m === m);
-      
-      // batching
-      for (let batchStart = 0; batchStart < morphFrames.length; batchStart += BATCH_SIZE) {
-        const batchEnd = Math.min(batchStart + BATCH_SIZE, morphFrames.length);
-        const currentBatch = morphFrames.slice(batchStart, batchEnd);
-        const batchIdx = Math.floor(batchStart / BATCH_SIZE);
-        
-        // write batch frames to ffmpeg filesystem
-        await processBatchFrames(currentBatch, context, m);
-        
-        const segmentFile = `temp_morph${m}_segment${batchIdx}.mp4`;
-        console.log(`creating video segment for morph ${m}, batch ${batchIdx}`);
-        await ffmpegRef.current.exec([
-          '-framerate', `${fps}`,
-          '-i', `morph${m}_frame%09d.png`,
-          '-c:v', 'libx264',
-          '-preset', 'ultrafast',
-          '-crf', '23',
-          '-pix_fmt', 'yuv420p',
-          '-f', 'mp4',
-          segmentFile
-        ]);
-        
-        segmentFiles.push(segmentFile);
-        console.log(`created video segment: ${segmentFile}`);
-        // clean up the frame files to free memory
-        for (const { frameIndex } of currentBatch) {
-          const fileName = `morph${m}_frame${String(frameIndex).padStart(9, "0")}.png`;
-          try {
-            await ffmpegRef.current.deleteFile(fileName);
-            console.log(`deleted temporary frame: ${fileName}`);
-          } catch (e) {
-            console.error("Failed to delete frame:", fileName, e);
+  //  button handler to export video using ffmpeg with batching
+  const handleVideoExport = async () => {
+    if (!isMorphing) { return; }
+
+    // get the settings for export
+    const scaleFactor = currentExportSetting.resolution / originalCanvasWidth;
+    rescaleCanvas(scaleFactor); // scale canvas
+    const fps = currentExportSetting.framerate;
+    const separated = currentExportSetting.fileFormat === 'Separated MP4s';
+    const numOfMorphs = pathsRef.current[0].interpolatorsToEnd.length;
+
+    // calculate frames
+    const totalFrames = Math.ceil((morphSetting.duration / 1000) * fps);
+    console.log(`Resolution: ${canvasRef.current.width}x${canvasRef.current.height}`);
+    console.log(`FPS: ${fps}, Frames per morph: ${totalFrames}`);
+    console.log(`Total frames: ${totalFrames * numOfMorphs}`);
+
+    // generate the sequence of frames
+    const frameQueue = getFrameQueue(totalFrames);
+    const canvas = canvasRef.current;
+    const context = canvas.getContext('2d');
+
+    // determine batch size based on resolution, smaller batches for higher resolutions
+    // decreases batch size as resolution increases
+    const BATCH_SIZE = Math.max(10, Math.min(30, Math.floor(2000000 / (canvas.width * canvas.height))));
+    console.log(`Using batch size of ${BATCH_SIZE} frames per batch`);
+
+    // array to store temporary video segment filenames
+    const tempSegmentFiles = [];
+
+    if (separated) {
+      for (let m = 0; m < numOfMorphs; m++) {
+        const segmentFiles = [];
+
+        // calculate frames for this morph
+        const morphFrames = frameQueue.filter(item => item.m === m);
+
+        // batching
+        for (let batchStart = 0; batchStart < morphFrames.length; batchStart += BATCH_SIZE) {
+          const batchEnd = Math.min(batchStart + BATCH_SIZE, morphFrames.length);
+          const currentBatch = morphFrames.slice(batchStart, batchEnd);
+          const batchIdx = Math.floor(batchStart / BATCH_SIZE);
+
+          // write batch frames to ffmpeg filesystem
+          await processBatchFrames(currentBatch, context, m);
+
+          const segmentFile = `temp_morph${m}_segment${batchIdx}.mp4`;
+          console.log(`creating video segment for morph ${m}, batch ${batchIdx}`);
+          await ffmpegRef.current.exec([
+            '-framerate', `${fps}`,
+            '-start_number', `${currentBatch[0].frameIndex}`,
+            '-i', `morph${m}_frame%09d.png`,
+            '-c:v', 'libx264',
+            '-preset', 'ultrafast',
+            '-crf', '23',
+            '-pix_fmt', 'yuv420p',
+            '-f', 'mp4',
+            segmentFile
+          ]);
+
+          segmentFiles.push(segmentFile);
+          console.log(`created video segment: ${segmentFile}`);
+
+          // clean up the frame files to free memory
+          for (const { frameIndex } of currentBatch) {
+            const fileName = `morph${m}_frame${String(frameIndex).padStart(9, "0")}.png`;
+            try {
+              await ffmpegRef.current.deleteFile(fileName);
+              console.log(`deleted temporary frame: ${fileName}`);
+            } catch (e) {
+              console.error("Failed to delete frame:", fileName, e);
+            }
           }
+
+          await new Promise(resolve => setTimeout(resolve, 10));
         }
-        
-        await new Promise(resolve => setTimeout(resolve, 10));
+
+        const concatContent = segmentFiles.map(file => `file '${file}'`).join('\n');
+        console.log(concatContent);
+        const concatFileName = `concat_morph${m}.txt`;
+        await ffmpegRef.current.writeFile(concatFileName, concatContent);
+
+        // concatenate temp segments to final output for this morph
+        const outputFile = `${currentExportSetting.filename}_${m}.mp4`;
+        console.log(`creating concat video file for morph ${m}`);
+        await ffmpegRef.current.exec([
+          '-f', 'concat',
+          '-safe', '0',
+          '-i', concatFileName,
+          '-c', 'copy',
+          '-movflags', '+faststart',
+          outputFile
+        ]);
+
+        const videoData = await ffmpegRef.current.readFile(outputFile);
+        const videoBlob = new Blob([videoData.buffer], { type: 'video/mp4' });
+        const url = URL.createObjectURL(videoBlob);
+
+        const link = document.createElement('a');
+      link.href = url;
+        link.download = outputFile;
+        document.body.appendChild(link);
+        link.click();
+        document.body.removeChild(link);
+        URL.revokeObjectURL(url);
+        console.log(`downloaded concat video file for morph ${m}`);
+
+
+        // clean up this morph's temp files
+        for (const file of segmentFiles) {
+          console.log('trying to delete temporary segment:', file);
+          await ffmpegRef.current.deleteFile(file);
+          console.log(`deleted temporary segment: ${file}`);
+        }
+        await ffmpegRef.current.deleteFile(concatFileName);
+        console.log(`deleted concat file: ${concatFileName}`);
+        await ffmpegRef.current.deleteFile(outputFile);
+        console.log(`deleted output file: ${outputFile}`);
       }
-      
-      const concatContent = segmentFiles.map(file => `file '${file}'`).join('\n');
-      const concatFileName = `concat_morph${m}.txt`;
-      await ffmpegRef.current.writeFile(concatFileName, concatContent);
-      
-      // concatenate temp segments to final output for this morph
-      const outputFile = `${currentExportSetting.filename}_${m}.mp4`;
-      console.log(`creating concat video file for morph ${m}`); 
+    } else {
+      for (let m = 0; m < numOfMorphs; m++) {
+        const morphFrames = frameQueue.filter(item => item.m === m);
+
+        for (let batchStart = 0; batchStart < morphFrames.length; batchStart += BATCH_SIZE) {
+          const batchEnd = Math.min(batchStart + BATCH_SIZE, morphFrames.length);
+          const currentBatch = morphFrames.slice(batchStart, batchEnd);
+          const batchIdx = Math.floor(batchStart / BATCH_SIZE);
+          const segmentIdx = m * Math.ceil(morphFrames.length / BATCH_SIZE) + batchIdx;
+
+          // process each frame in the batch
+          await processBatchFrames(currentBatch, context, m, totalFrames);
+
+          // create video clip segment for this batch
+          const segmentFile = `temp_segment${segmentIdx}.mp4`;
+
+          console.log(`creating video segment for morph ${m}, batch ${batchIdx}`);
+          await ffmpegRef.current.exec([
+            '-framerate', `${fps}`,
+            '-start_number', `${m * totalFrames + batchStart}`,
+            '-i', `frame%09d.png`,
+            '-frames:v', `${currentBatch.length}`,
+            '-c:v', 'libx264',
+            '-preset', 'ultrafast',
+            '-crf', '23',
+            '-pix_fmt', 'yuv420p',
+            '-f', 'mp4',
+            segmentFile
+          ]);
+
+
+          tempSegmentFiles.push(segmentFile);
+          console.log(`created video segment: ${segmentFile}`);
+
+          // clean up frame files to free memory
+          for (const { frameIndex } of currentBatch) {
+            const fileName = `frame${String(frameIndex + totalFrames * m).padStart(9, "0")}.png`;
+            try {
+              await ffmpegRef.current.deleteFile(fileName);
+              console.log(`deleted temporary frame: ${fileName}`);
+            } catch (e) {
+              console.error("Failed to delete frame:", fileName);
+            }
+          }
+
+          await new Promise(resolve => setTimeout(resolve, 10));
+        }
+      }
+
+      // Create concat file
+      const concatContent = tempSegmentFiles.map(file => `file '${file}'`).join('\n');
+      await ffmpegRef.current.writeFile('concat.txt', concatContent);
+      console.log('creating concat video file');
+      // concatenate temp video clips to final output
+      const outputFile = `${currentExportSetting.filename}.mp4`;
       await ffmpegRef.current.exec([
         '-f', 'concat',
         '-safe', '0',
-        '-i', concatFileName,
+        '-i', 'concat.txt',
         '-c', 'copy',
         '-movflags', '+faststart',
         outputFile
       ]);
-      
+
+      // download the final output
       const videoData = await ffmpegRef.current.readFile(outputFile);
       const videoBlob = new Blob([videoData.buffer], { type: 'video/mp4' });
       const url = URL.createObjectURL(videoBlob);
-      
+
       const link = document.createElement('a');
       link.href = url;
       link.download = outputFile;
@@ -646,143 +740,51 @@ const handleVideoExport = async () => {
       link.click();
       document.body.removeChild(link);
       URL.revokeObjectURL(url);
-      console.log(`downloaded concat video file for morph ${m}`);
-      
-      // clean up this morph's temp files
-      for (const file of segmentFiles) {
-        await ffmpegRef.current.deleteFile(file);
-        console.log(`deleted temporary segment: ${file}`);
-      }
-      await ffmpegRef.current.deleteFile(concatFileName);
-      await ffmpegRef.current.deleteFile(outputFile);
+      console.log('downloaded video file');
     }
-  } else {
-    for (let m = 0; m < numOfMorphs; m++) {
-      const morphFrames = frameQueue.filter(item => item.m === m);
-      
-      for (let batchStart = 0; batchStart < morphFrames.length; batchStart += BATCH_SIZE) {
-        const batchEnd = Math.min(batchStart + BATCH_SIZE, morphFrames.length);
-        const currentBatch = morphFrames.slice(batchStart, batchEnd);
-        const batchIdx = Math.floor(batchStart / BATCH_SIZE);
-        const segmentIdx = m * Math.ceil(morphFrames.length / BATCH_SIZE) + batchIdx;
-        
-        // process each frame in the batch
-        await processBatchFrames(currentBatch, context, m, totalFrames);
-        
-        // create video clip segment for this batch
-        const segmentFile = `temp_segment${segmentIdx}.mp4`;
-        
-        let inputPattern;
-        if (m === 0 && batchStart === 0) {
-          inputPattern = 'frame%09d.png';
-        } else {
-          const frameOffset = m * totalFrames + batchStart;
-          inputPattern = `frame${String(frameOffset).padStart(9, '0')}.png`;
-        }
-        console.log(`creating video segment for morph ${m}, batch ${batchIdx}`);
-        await ffmpegRef.current.exec([
-          '-framerate', `${fps}`,
-          '-start_number', `${m * totalFrames + batchStart}`,
-          '-i', `frame%09d.png`,
-          '-frames:v', `${currentBatch.length}`,
-          '-c:v', 'libx264',
-          '-preset', 'ultrafast',
-          '-crf', '23',
-          '-pix_fmt', 'yuv420p',
-          '-f', 'mp4',
-          segmentFile
-        ]);
-        
-        tempSegmentFiles.push(segmentFile);
-        console.log(`created video segment: ${segmentFile}`);
-        
-        // clean up frame files to free memory
-        for (const { frameIndex } of currentBatch) {
-          const fileName = `frame${String(frameIndex + totalFrames * m).padStart(9, "0")}.png`;
-          try {
-            await ffmpegRef.current.deleteFile(fileName);
-            console.log(`deleted temporary frame: ${fileName}`);
-          } catch (e) {
-            console.error("Failed to delete frame:", fileName);
-          }
-        }
-        
-        await new Promise(resolve => setTimeout(resolve, 10));
-      }
-    }
-    
-    // Create concat file
-    const concatContent = tempSegmentFiles.map(file => `file '${file}'`).join('\n');
-    await ffmpegRef.current.writeFile('concat.txt', concatContent);
-    console.log('creating concat video file');
-    // concatenate temp video clips to final output
-    const outputFile = `${currentExportSetting.filename}.mp4`;
-    await ffmpegRef.current.exec([
-      '-f', 'concat',
-      '-safe', '0',
-      '-i', 'concat.txt',
-      '-c', 'copy',
-      '-movflags', '+faststart',
-      outputFile
-    ]);
-    
-    // download the final output
-    const videoData = await ffmpegRef.current.readFile(outputFile);
-    const videoBlob = new Blob([videoData.buffer], { type: 'video/mp4' });
-    const url = URL.createObjectURL(videoBlob);
-    
-    const link = document.createElement('a');
-    link.href = url;
-    link.download = outputFile;
-    document.body.appendChild(link);
-    link.click();
-    document.body.removeChild(link);
-    URL.revokeObjectURL(url);
-    console.log('downloaded video file');
-  }
-  
-  
-  // delete all temporary files
-  try {
-    const files = await ffmpegRef.current.listDir('/');
-    for (const file of files) {
-      if (file.name && (file.name.endsWith('.png') || file.name.endsWith('.mp4') || file.name.endsWith('.txt'))) {
-        await ffmpegRef.current.deleteFile(file.name);
-        console.log(`deleted temporary file: ${file.name}`);
-      }
-    }
-  } catch (e) {
-    console.error("error during cleanup:", e);
-  }
-};
 
-// helper function to process batch frames
-const processBatchFrames = async (batch, context, morphIdx, totalFrames = null) => {
-  console.log(batch);
-  for (const { img, frameIndex } of batch) {
-    // ensure image is loaded
-    if (!img.complete) {
-      await new Promise(resolve => { img.onload = resolve; });
+
+    // delete all temporary files
+    try {
+      const files = await ffmpegRef.current.listDir('/');
+      for (const file of files) {
+        if (file.name && (file.name.endsWith('.png') || file.name.endsWith('.mp4') || file.name.endsWith('.txt'))) {
+          await ffmpegRef.current.deleteFile(file.name);
+          console.log(`deleted temporary file: ${file.name}`);
+        }
+      }
+    } catch (e) {
+      console.error("error during cleanup:", e);
     }
-    
-    context.clearRect(0, 0, context.canvas.width, context.canvas.height);
-    context.drawImage(img, 0, 0, context.canvas.width, context.canvas.height);
-    
-    const dataUrl = context.canvas.toDataURL('image/png');
-    const data = dataURLtoUint8Array(dataUrl);
-    
-    let fileName;
-    if (totalFrames === null) {
-      fileName = `morph${morphIdx}_frame${String(frameIndex).padStart(9, "0")}.png`;
-    } else {
-      fileName = `frame${String(frameIndex + totalFrames * morphIdx).padStart(9, "0")}.png`;
+  };
+
+  // helper function to process batch frames
+  const processBatchFrames = async (batch, context, morphIdx, totalFrames = null) => {
+    console.log(batch);
+    for (const { img, frameIndex } of batch) {
+      // ensure image is loaded
+      if (!img.complete) {
+        await new Promise(resolve => { img.onload = resolve; });
+      }
+
+      context.clearRect(0, 0, context.canvas.width, context.canvas.height);
+      context.drawImage(img, 0, 0, context.canvas.width, context.canvas.height);
+
+      const dataUrl = context.canvas.toDataURL('image/png');
+      const data = dataURLtoUint8Array(dataUrl);
+
+      let fileName;
+      if (totalFrames === null) {
+        fileName = `morph${morphIdx}_frame${String(frameIndex).padStart(9, "0")}.png`;
+      } else {
+        fileName = `frame${String(frameIndex + totalFrames * morphIdx).padStart(9, "0")}.png`;
+      }
+
+      await ffmpegRef.current.writeFile(fileName, data);
+      console.log(`wrote ${fileName} to ffmpeg VFS`);
+      URL.revokeObjectURL(dataUrl);
     }
-    
-    await ffmpegRef.current.writeFile(fileName, data);
-    console.log(`wrote ${fileName} to ffmpeg VFS`);
-    URL.revokeObjectURL(dataUrl);
   }
-}
 
   return (
     <div style={{ width: "100%", height: "100%", margin: "auto" }}>
