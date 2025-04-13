@@ -113,7 +113,7 @@ function SVGList({ onSvgsChange }) {
                     padding: 0,
                     fontFamily: 'inherit',
                 }}
-            >Start/Update Morphing Preview</button>
+            >Start/Update Morphing</button>
         </div>
     );
 }

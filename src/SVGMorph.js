@@ -62,10 +62,22 @@ function SVGMorph({ svgs, morphSetting, exportSetting, onLoadingStateChange }) {
       morphSetting.quality === currentMorphSetting.quality &&
       morphSetting.matching === currentMorphSetting.matching &&
       currentSvgs === svgs) {
+
       setCurrentSvgs(svgs);
       setCurrentMorphSetting(morphSetting);
       return;
     } else {
+      console.log(morphSetting.oneToMany === currentMorphSetting.oneToMany);
+      console.log(morphSetting.quality === currentMorphSetting.quality);
+      console.log(morphSetting.matching === currentMorphSetting.matching);
+      console.log(currentSvgs === svgs);
+      console.log("reinitializing morph setting");
+      console.log("SVGs length: " + svgs.length);      
+      console.log(currentSvgs);
+      console.log(svgs);
+      console.log("Morph settings:");
+      console.log(currentMorphSetting);
+      console.log(morphSetting);
       setCurrentSvgs(svgs);
       setCurrentMorphSetting(morphSetting);
     }

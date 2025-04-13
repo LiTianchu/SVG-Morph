@@ -1,0 +1,8 @@
+<svg width="800px" height="800px" viewBox="0 0 16 16" xmlns="http://www.w3.org/2000/svg">
+<path
+    fill-rule="evenodd"
+    stroke="red"
+	fill = "black"
+    d="M0,0 h16 v16 h-16 z
+       M3.56,3.56 v8.89 h8.89 v-8.89 z" />
+</svg>

@@ -34,9 +34,10 @@ function MorphSettingPanel({ onSettingChange }) {
     }
 
     const handleQualitySettingChange = (newQuality) => {
-        if (newQuality != quality) {
-            setQuality(newQuality);
-            onSettingChange({ duration: duration, quality: parseInt(newQuality), easing: easing, oneToMany: oneToMany, matching: matching });
+        const qualityInt = parseInt(newQuality);
+        if (qualityInt != quality) {
+            setQuality(qualityInt);
+            onSettingChange({ duration: duration, quality: qualityInt, easing: easing, oneToMany: oneToMany, matching: matching });
         }
     }
 
