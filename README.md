@@ -7,4 +7,5 @@ Demo SVGs from: https://www.svgrepo.com/
 Able to morph the path shape, color, and stroke lines of uploaded SVGs
 
 ## Demo  
-![Demo1](./public/morphing_sun_nearest-ezgif.com-speed (1).gif)  
+![Demo1](./public/morphing_sun_nearest-ezgif.com-speed.gif)  
+![Demo2](./public/morphing_videp_4k_60frame-ezgif.com-speed.gif)
